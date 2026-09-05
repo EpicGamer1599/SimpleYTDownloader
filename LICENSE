@@ -1,0 +1,105 @@
+SimpleYTDownloader Community Contribution License
+Version 1.0
+
+Copyright (c) 2026 EpicGamer1599.
+All rights reserved except for the permissions expressly granted below.
+
+Project: https://github.com/EpicGamer1599/SimpleYTDownloader
+
+1. Ownership and scope
+
+"Owner" means the person publishing this project as EpicGamer1599.
+"Software" means the SimpleYTDownloader project code, documentation, and
+original project assets that the Owner owns or is authorized to license under
+these terms. The Owner retains their copyright and other rights in the
+Software. Permission to use or contribute to the project does not transfer
+those rights or give anyone ownership of the project or control of its releases.
+
+Contributors retain copyright in their original contributions, subject to the
+license they grant in section 4. This license does not claim ownership of
+third-party software, downloaded videos, audio, thumbnails, or other content.
+
+2. Permission to use and improve the project
+
+Subject to this license, the Owner grants you a worldwide, non-exclusive,
+royalty-free permission to:
+
+- Download, install, and run the Software for personal or internal use.
+- Read and copy the source, build it, and modify it for your own internal use
+  or to develop improvements for this project.
+- Create and share source-code forks, branches, and patches for proposing,
+  discussing, testing, and submitting improvements to the official project.
+- Submit bug fixes, features, documentation, translations, tests, and other
+  improvements through the official repository.
+
+Keep this license and existing copyright, attribution, and third-party notices
+with permitted source copies. Clearly identify your changes and do not present
+an unofficial fork or build as an official release.
+
+3. Reserved permissions
+
+Except as permitted above, by a separate applicable license, or by law, you need
+the Owner's written permission to sell or sublicense the Software, distribute
+standalone modified releases, republish it as another product, or incorporate
+the Owner's code or assets into another distributed product or service.
+
+You may not claim authorship or ownership of the Owner's work or imply the
+Owner's endorsement of your work. You may use the project name to identify the
+project and describe contributions, but this license grants no broader right
+to use the Owner's branding.
+
+These restrictions do not apply to independently reusable original work you
+own, excluding any of the Owner's code or assets included in it. They also do
+not limit viewing and forking rights provided by GitHub's Terms of Service.
+
+4. Contributions and the Owner's rights
+
+A "Contribution" is an original change or other material that you intentionally
+submit for inclusion in this project under these terms. Material clearly marked
+"not a contribution" and third-party material identified as separately licensed
+are not Contributions for this grant.
+
+By intentionally submitting a Contribution under this section, you grant the
+Owner a perpetual, worldwide, non-exclusive, irrevocable, royalty-free,
+transferable, and sublicensable copyright license to use, reproduce, modify,
+adapt, publish, display, perform, distribute, and create derivative works from
+that Contribution. This includes distributing and licensing it as part of
+commercial or proprietary products and under different license terms, without
+requiring further permission or payment to you.
+
+You retain copyright in your original Contribution. This grant is a license,
+not a copyright assignment, and does not take ownership of unrelated work.
+You confirm that you own the rights you grant or have the copyright holder's
+authorization to grant them. Identify any third-party material and its license
+when submitting it; its separate conditions continue to apply.
+
+The Owner decides whether to accept, change, publish, or remove a Contribution.
+Submission gives no right to payment, revenue sharing, project ownership, or
+maintainer access. This section does not retroactively obtain rights in earlier
+contributions submitted without agreement to these terms. Non-waivable legal
+rights remain unaffected.
+
+5. Third-party licenses
+
+Third-party libraries, tools, and other materials retain their own owners and
+licenses. This license neither replaces their terms nor limits rights those
+licenses grant. Their attribution, source-availability, redistribution, and
+other requirements must still be met, including any conditions applying to a
+combined distribution. This license is not permission to distribute a bundle
+in violation of any dependency's license.
+
+6. Warranty and liability
+
+To the extent permitted by applicable law, the Software and Contributions are
+provided as available, with no warranty of correctness, fitness for a particular
+purpose, uninterrupted operation, or freedom from defects. The Owner and
+contributors are not liable for losses or damage arising from their use or
+inability to use them. Nothing here excludes rights or liabilities that cannot
+lawfully be excluded.
+
+7. Other permissions
+
+For permissions beyond this license, contact EpicGamer1599 through the official
+repository. Additional permission must be given in writing by the Owner.
+
+This is a custom source-available license, not a standard open-source license.

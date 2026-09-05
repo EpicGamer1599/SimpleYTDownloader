@@ -326,6 +326,14 @@ SimpleYTDownloader/
 
 Downloads and conversion run in a separate process supervised by a background thread. The GUI reads protected snapshots; workers never draw or modify Pygame objects. Update checks/downloads run in their own background thread, and the folder picker runs separately to keep progress responsive.
 
+## License and contributions
+
+The project uses the custom **[SimpleYTDownloader Community Contribution License](LICENSE)**. EpicGamer1599 retains rights in their original project work. You may use the app, inspect and privately modify the source, and create forks or pull requests to contribute improvements. Selling the software or publishing a separate modified product requires the owner's written permission. See the full license for its scope and conditions.
+
+**Contributors keep copyright in their additions.** By intentionally submitting a contribution under section 4 of the license, you grant EpicGamer1599 broad rights to use, modify, distribute, sublicense, and relicense it, including commercially. Submit only work you own or are authorized to license, and identify any separately licensed third-party material. This does not automatically transfer ownership of contributions or obtain rights in earlier submissions.
+
+**Dependency compatibility:** the current build includes Mutagen, whose [upstream license is GPL-2.0-or-later](https://mutagen.readthedocs.io/en/latest/), and other independently licensed components. The custom project license does not override those licenses or by itself establish that the combined EXE can be distributed under restrictive terms. Obtain a license-compatibility review before distributing a build under these terms; excluding third-party material from an ownership claim does not remove its distribution obligations. This custom license is a legal draft and has not been reviewed by a lawyer.
+
 ---
 
 <p align="center">
