@@ -2,7 +2,7 @@
 import pygame
 
 from app_version import APP_VERSION
-from ui.widgets import ACCENT, BG, BORDER, FIELD, MUTED, PANEL, RED, TEXT
+from ui.widgets import BG, BORDER, FIELD, MUTED, PANEL, RED, TEXT
 
 
 class UpdateDialog:
@@ -42,7 +42,7 @@ class UpdateDialog:
         p.panel(box, PANEL, BORDER, 18)
         x, y, inner = box.x + 28, box.y + 25, box.w - 56
         release = snapshot.release
-        p.text("APPLICATION UPDATE", (x, y), 10, ACCENT, True)
+        p.text("APPLICATION UPDATE", (x, y), 10, p.accent, True)
         p.text("A new version is ready" if release and snapshot.state == "available" else "Application update", (x, y + 28), 25, TEXT, True)
         p.text(f"Current: {APP_VERSION}" + (f"    →    New: {release.version}" if release else ""), (x, y + 72), 14, MUTED, width=inner)
         if release:
@@ -61,7 +61,7 @@ class UpdateDialog:
             bar = pygame.Rect(x, y + 264, inner, 5)
             pygame.draw.rect(app.surface, FIELD, bar, border_radius=2)
             if progress:
-                pygame.draw.rect(app.surface, ACCENT, (bar.x, bar.y, int(bar.w * min(1, progress)), bar.h), border_radius=2)
+                pygame.draw.rect(app.surface, p.accent, (bar.x, bar.y, int(bar.w * min(1, progress)), bar.h), border_radius=2)
             message = snapshot.message
             if snapshot.state == "downloading":
                 message += f"  {snapshot.received / 1048576:.1f} / {snapshot.total / 1048576:.1f} MB"

@@ -1,8 +1,41 @@
 # Verification results
 
-Tested on Windows on 2026-09-05.
+Latest verification: Windows, 2026-09-06. Earlier 1.0.0 results are retained below.
 
-## Windows executable build
+## Version 1.0.1
+
+Implemented optional thumbnail saving, six persistent accent themes, error dialogs with stable support codes, prefilled GitHub issue drafts, and updated SimpleYTDownloader GUI branding. Old settings migrate with thumbnail saving off and Orange selected. The existing 1.0.0 ZIP is retained.
+
+| Verification | Result |
+| --- | --- |
+| Syntax compilation and module imports | Passed for app, reporting, thumbnail, theme, UI, worker, and updater modules |
+| `python -m unittest discover -v` | **65 passed**, no skips, in 33.886 seconds |
+| `python -m tests.executable_smoke` | **7 passed** in 53.629 seconds |
+| `python -m tests.updater_executable_smoke` | **4 passed** in 41.747 seconds |
+| Requested one-file/windowed PyInstaller build | Exit code 0; bundled `--version` reports **1.0.1** |
+| Packaged GUI with saved Blue theme and thumbnail setting | Opened successfully, received an invalid-link input, rendered the error dialog with **SYTD-LINK**, and exited with code 0 |
+| Release ZIPs | CRC checks passed; each contains only the freshly built, hash-matching `SimpleYTDownloader.exe` at its root |
+
+The new tests exercise thumbnail saving enabled/disabled, fallback candidates, unsupported/truncated/oversized images, existing-image preservation, and a failed thumbnail keeping its downloaded media. Actual yt-dlp and FFmpeg downloads from loopback fixtures verify thumbnail saving for **both MP4 and MP3**, including an HTTP 404 image and disabled saving. These cases were also run through the packaged EXE worker.
+
+GUI tests exercise all six colours, persistence, a 760 × 600 window, the thumbnail toggle and captured queue preference, blocking error-dialog focus, copyable reports, error deduplication, explicit browser actions, a slow/failing browser opener, and continued frame processing. Report checks verify the fixed repository destination, version/code/reproduction template, URL length limits, and removal of common private paths, links, and credential fields. Browser opening is mocked in these tests; no GitHub issue is submitted.
+
+The four real helper transactions verify cancellation before handoff, successful replacement/relaunch/cleanup, failed-startup rollback, and a **1.0.0 → 1.0.1 upgrade using the actual prior build**. All installation changes use disposable copies under `test-artifacts/`; no production installation or GitHub release is modified.
+
+Screenshots visually reviewed: `settings-1.0.1-blue.png`, `settings-1.0.1-small.png`, `error-1.0.1.png`, and `executable-error-1.0.1.png`, all under `test-artifacts/`. The packaged GUI screenshot shows the Blue theme and report dialog in the real windowed EXE.
+
+Artifacts:
+
+- `dist/SimpleYTDownloader.exe`: **27,243,693 bytes**.
+- `Builds/1.0.1.zip`: **26,968,198 bytes**, matching the previous build-folder layout.
+- `dist/SimpleYTDownloader-v1.0.1.zip`: the identical ZIP with the filename required by the GitHub updater.
+- `test-artifacts/release-1.0.1.json`: artifact sizes and SHA-256 hashes.
+- `test-artifacts/tests-1.0.1.log`, `packaged-features-1.0.1.log`, and `updater-1.0.1.log`: detailed test output.
+- `docs/releases/1.0.1.md`: prepared release notes.
+
+Scope and limits: thumbnails are separate JPEG, PNG, or WebP files, not embedded artwork; unavailable thumbnails produce a warning and leave media saved. Formats are checked by their signatures/structural markers rather than a full image decoder. Transfers are bounded to 12 MiB. The browser report is a draft for the user to review and submit, and GitHub sign-in may be required. Common sensitive strings are redacted, but reports should still be reviewed. No live YouTube thumbnail download or GitHub issue submission was performed. The prior updater limits around permissions, antivirus locks, interrupted power, and startup acknowledgement still apply. No dependencies were added.
+
+## Previous 1.0.0 Windows executable build
 
 Built `dist/SimpleYTDownloader.exe` using PyInstaller 6.22.2 with the requested command in the project's virtual environment:
 

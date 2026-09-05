@@ -29,8 +29,11 @@
 | :--- | :--- |
 | **MP4 video** | Choose a resolution or Best available, with a fallback to the quality the video actually offers. |
 | **MP3 audio** | Choose an encoding bitrate or Best available variable-bitrate audio. |
+| **Optional thumbnails** | Save a JPEG, PNG, or WebP image beside each MP4 or MP3. Turn it on or off in Settings. |
 | **A queue you control** | Add multiple videos, start or pause the queue, cancel items, retry failures, and follow progress. |
 | **A clean desktop interface** | A resizable dark Pygame UI with keyboard shortcuts, clipboard support, and a native Windows folder picker. |
+| **Six accent themes** | Switch instantly between Orange, Blue, Violet, Mint, Rose, and Gold. Your choice is remembered. |
+| **Helpful error dialogs** | See a stable error code, copy a report, or open a prefilled GitHub issue to review and submit. |
 | **Readable filenames** | Keep original titles, handle Windows filename rules, and preserve existing files with numbered suffixes. |
 | **Remembered preferences** | Save your format, quality, folder, tool paths, and automatic-update preference. |
 | **Built-in updates** | Check published GitHub releases, review release notes, and install with progress, backup, and rollback support. |
@@ -43,7 +46,9 @@
 3. Paste a video URL on **Download**, choose **MP4** or **MP3**, and select your quality and output folder.
 4. Click **Add to Queue**, open **Queue**, and click **Start queue**.
 
-> **Using version 1.0.0?** The repository also includes [Builds/1.0.0.zip](Builds/1.0.0.zip). It contains the application EXE. Published updater assets use the filename `SimpleYTDownloader-v1.0.0.zip`.
+> **Version 1.0.1 build:** [Builds/1.0.1.zip](Builds/1.0.1.zip) contains the application EXE. The GitHub updater asset is named `SimpleYTDownloader-v1.0.1.zip`. The [1.0.0 build](Builds/1.0.0.zip) is also retained.
+
+See [what changed in 1.0.1](docs/releases/1.0.1.md) for the release notes.
 
 ### Media tools
 
@@ -57,6 +62,22 @@ The EXE includes Python, Pygame, yt-dlp, and its Python dependencies. Media proc
 FFmpeg can also be placed in `tools/ffmpeg/bin/` beside the application, or located through `FFMPEG_LOCATION`. Common Windows WinGet and Kdenlive installations are detected. Without FFmpeg, the app can attempt combined MP4 formats, with potentially limited resolution. The included Python requirements provide yt-dlp's EJS package.
 
 ## Make it yours
+
+### Appearance and thumbnails
+
+Open **Settings → Appearance** to choose **Orange, Blue, Violet, Mint, Rose, or Gold**. The accent changes immediately across buttons, selected controls, input highlights, progress indicators, and dialogs. The dark background stays consistent. Keep **Remember settings** enabled to save your choice.
+
+Turn **Settings → Save video thumbnails** on to save an image beside newly queued videos or audio files. The setting is off by default and is captured when each item is added, so retries keep that item's choice. Images use their original JPEG, PNG, or WebP format; they are separate files, not embedded album artwork.
+
+The image normally shares the saved media's filename stem. Existing images are preserved with a numbered suffix when needed. A missing, unsupported, oversized, or unreachable thumbnail produces a reportable warning while keeping the successfully downloaded media. Thumbnail transfers run inside the download worker, so queue cancellation and shutdown stop them as well. Each image is limited to 12 MiB, with up to three metadata-provided candidates attempted.
+
+### Error reports
+
+Download failures, thumbnail failures, input/settings errors, and manual update errors open a dialog with an error code such as `SYTD-NETWORK` or `SYTD-FFMPEG`. Choose **Close**, **Copy report**, or **Report on GitHub**. Error details can also be reopened from the queue. Repeated identical pending reports are grouped, and the queue can continue processing while a dialog is open.
+
+**Report on GitHub** opens a draft at [this project's Issues page](https://github.com/EpicGamer1599/SimpleYTDownloader/issues) with the app version, code, action, OS, error message, and reproduction template filled in. The app removes common local paths, links, and credential fields from the draft. Review the report and add reproduction steps before submitting; opening a draft does not submit an issue automatically. GitHub may ask you to sign in. If the browser cannot open, copy the report and paste it into a new issue manually.
+
+Automatic update checks at startup remain quiet when the connection fails. Unexpected startup/GUI failures have a fallback Windows prompt offering a report link. The repository includes a [bug report template](.github/ISSUE_TEMPLATE/bug_report.md) for issues opened directly on GitHub. Prefilled links use GitHub's documented [issue URL parameters](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-an-issue).
 
 ### Download and queue controls
 
@@ -191,7 +212,7 @@ If YouTube changes cause extraction errors, update yt-dlp in the project environ
 The application version has one source of truth: **[app_version.py](app_version.py)**.
 
 ```python
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 ```
 
 For the next release, set a strictly higher stable semantic version, then follow these steps:
@@ -211,12 +232,13 @@ For the next release, set a strictly higher stable semantic version, then follow
 | Application version | GitHub release tag | Required uploaded asset |
 | :--- | :--- | :--- |
 | `1.0.0` | `v1.0.0` | `SimpleYTDownloader-v1.0.0.zip` |
+| `1.0.1` | `v1.0.1` | `SimpleYTDownloader-v1.0.1.zip` |
 | `1.1.0` | `v1.1.0` | `SimpleYTDownloader-v1.1.0.zip` |
 
 The ZIP must contain **exactly one file at its root**:
 
 ```text
-SimpleYTDownloader-v1.0.0.zip
+SimpleYTDownloader-v1.0.1.zip
 └── SimpleYTDownloader.exe
 ```
 
@@ -262,22 +284,26 @@ See **[TESTING.md](TESTING.md)** for recorded results, environment details, and 
 SimpleYTDownloader/
 ├── main.py                    App entry point and bundled helper modes
 ├── app_version.py             Single APP_VERSION constant
+├── error_reporting.py         Stable error codes and redacted issue drafts
 ├── update_checker.py          Published releases, SemVer, verified downloads
 ├── update_service.py          Background checks, progress, cancellation
 ├── updater.py                 Staging, Windows helper, backup, rollback
 ├── runtime.py                 Source/frozen commands and windowed streams
 ├── config/
-│   └── settings.py            Validated JSON preferences
+│   ├── settings.py            Validated JSON preferences
+│   └── themes.py              Six dark-interface accent palettes
 ├── downloader/
 │   ├── models.py              Queue item data
 │   ├── manager.py             Sequential queue and worker supervision
 │   ├── worker.py              yt-dlp downloads and FFmpeg postprocessing
+│   ├── thumbnails.py          Optional bounded image downloads
 │   ├── process.py             Windows Job Objects and process cleanup
 │   ├── utils.py               URL/path validation and safe filenames
 │   └── dependencies.py        Media tool detection
 ├── ui/
 │   ├── app.py                 Pages, layout, input, and main loop
 │   ├── update_dialog.py       Release notes and update progress
+│   ├── error_dialog.py        Error details, copying, and GitHub reports
 │   ├── widgets.py             Drawing, icons, controls, and text fields
 │   └── native.py              Windows folder picker and clipboard
 ├── scripts/

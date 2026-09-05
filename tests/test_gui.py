@@ -20,6 +20,9 @@ from ui.native import clipboard_get, clipboard_set
 from update_checker import UpdateCancelled
 from update_service import UpdateService
 from tests.test_updates import parse_release, release_data
+from config.themes import THEMES
+from error_reporting import ErrorReport
+from urllib.parse import parse_qs, urlsplit
 
 ARTIFACTS = Path(__file__).resolve().parents[1] / "test-artifacts"
 
@@ -46,6 +49,82 @@ class GuiTests(unittest.TestCase):
 
     def key(self, key, mod=0):
         self.app.step([pygame.event.Event(pygame.KEYDOWN, key=key, mod=mod)])
+
+    def test_accent_themes_and_thumbnail_preferences(self):
+        self.click("nav:Settings")
+        for name, colour in THEMES.items():
+            self.click("theme:" + name)
+            self.assertEqual(self.app.p.accent, colour)
+            self.assertEqual(SettingsManager(Path(self.temp.name) / "config").settings.accent_theme, name)
+        self.click("theme:Blue")
+        self.click("toggle:save_thumbnails")
+        self.assertTrue(SettingsManager(Path(self.temp.name) / "config").settings.save_thumbnails)
+        pygame.image.save(self.app.surface, ARTIFACTS / "settings-1.0.1-blue.png")
+        self.app.step([pygame.event.Event(pygame.VIDEORESIZE, w=760, h=600)])
+        self.assertTrue(all(any(hit.key == "theme:" + name for hit in self.app.hits) for name in THEMES))
+        pygame.image.save(self.app.surface, ARTIFACTS / "settings-1.0.1-small.png")
+        self.click("nav:Download")
+        self.app.inputs["url"].set("https://youtu.be/jNQXAC9IVRw")
+        self.app.add_to_queue()
+        self.assertTrue(self.app.manager.snapshot()[0].save_thumbnails)
+
+    def test_error_dialog_report_is_explicit_prefilled_and_nonblocking(self):
+        entered, released = threading.Event(), threading.Event()
+        urls = []
+        def open_browser(url, **kwargs):
+            urls.append(url)
+            entered.set()
+            released.wait(2)
+            return True
+        with patch("ui.error_dialog.webbrowser.open", side_effect=open_browser):
+            self.app.notify("Could not reach YouTube. Check your connection.", True, context="Download MP4")
+            self.app.step([])
+            self.assertTrue(self.app.error_dialog.visible)
+            self.assertEqual(urls, [])
+            self.assertTrue(all(hit.key.startswith("error:") for hit in self.app.hits))
+            pygame.image.save(self.app.surface, ARTIFACTS / "error-1.0.1.png")
+            self.click("error:report")
+            self.assertTrue(entered.wait(1))
+            start = time.monotonic()
+            for _ in range(15):
+                self.app.step([])
+            self.assertLess(time.monotonic() - start, 1)
+            query = parse_qs(urlsplit(urls[0]).query)
+            self.assertIn("SYTD-NETWORK", query["body"][0])
+            self.assertIn("Steps to reproduce", query["body"][0])
+            released.set()
+            deadline = time.monotonic() + 2
+            while self.app.error_dialog.opening and time.monotonic() < deadline:
+                self.app.step([])
+                time.sleep(0.01)
+            with patch("ui.error_dialog.clipboard_set") as copy:
+                self.click("error:copy")
+                self.assertIn("SYTD-NETWORK", copy.call_args.args[0])
+            self.click("error:close")
+            self.click("nav:Queue")
+            self.assertFalse(self.app.error_dialog.visible)
+
+    def test_browser_failure_and_manual_update_error_are_reportable(self):
+        with patch("ui.error_dialog.webbrowser.open", return_value=False):
+            self.app.updates._set(state="error", message="GitHub is temporarily unavailable.")
+            self.app.updates._events.put(("error", True))
+            self.app.step([])
+            self.assertTrue(self.app.error_dialog.visible)
+            self.assertFalse(self.app.update_dialog.visible)
+            self.click("error:report")
+            deadline = time.monotonic() + 2
+            while self.app.error_dialog.opening and time.monotonic() < deadline:
+                self.app.step([])
+                time.sleep(0.01)
+            self.assertIn("Could not open", self.app.error_dialog.status)
+            report = ErrorReport.create("FFmpeg is missing", "Download MP3")
+            self.app.error_dialog.show(report)
+            self.app.error_dialog.show(report)
+            self.assertEqual(len(self.app.error_dialog.reports), 2)
+            self.key(pygame.K_ESCAPE)
+            self.assertEqual(self.app.error_dialog.reports[0], report)
+            self.key(pygame.K_ESCAPE)
+            self.assertFalse(self.app.error_dialog.visible)
 
     def test_manual_update_dialog_background_check_and_preferences(self):
         entered, release_check = threading.Event(), threading.Event()
@@ -188,6 +267,8 @@ class GuiTests(unittest.TestCase):
         self.assertLess(maximum_frame, 0.5)
         self.assertTrue(any(i.state == "Completed" for i in self.app.manager.snapshot()))
         self.assertTrue(any(i.state == "Failed" for i in self.app.manager.snapshot()))
+        self.assertTrue(self.app.error_dialog.visible)
+        self.key(pygame.K_ESCAPE)
         pygame.image.save(self.app.surface, ARTIFACTS / "queue.png")
         self.app.step([pygame.event.Event(pygame.MOUSEWHEEL, y=-5, x=0)])
         self.assertGreater(self.app.scroll["Queue"], 0)
@@ -242,7 +323,7 @@ class GuiTests(unittest.TestCase):
             title = ctypes.create_unicode_buffer(256)
             user.GetWindowTextW(hwnd, title, 256)
             # Windows venv executables may redirect to a child Python process.
-            if pid.value == process.pid or title.value == "YouTube Downloader — Choose a folder":
+            if pid.value == process.pid or title.value == "SimpleYTDownloader — Choose a folder":
                 user.EnumChildWindows(hwnd, child, 0)
             return True
 

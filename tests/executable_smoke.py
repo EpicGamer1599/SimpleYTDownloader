@@ -25,9 +25,9 @@ def execute_packaged(job, emit):
 
 
 class ExecutableMediaTests(test_media.MediaTests):
-    def download(self, filename, format, quality):
+    def download(self, filename, format, quality, save_thumbnails=False):
         with patch.object(test_media, "execute", execute_packaged):
-            return super().download(filename, format, quality)
+            return super().download(filename, format, quality, save_thumbnails)
 
 
 class ExecutablePickerTests(test_gui.GuiTests):

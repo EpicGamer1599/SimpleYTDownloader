@@ -6,6 +6,8 @@ import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from config.themes import THEMES
+
 VIDEO_QUALITIES = ("Best available", "2160p", "1440p", "1080p", "720p", "480p", "360p")
 AUDIO_QUALITIES = ("Best available", "320 kbps", "256 kbps", "192 kbps", "128 kbps")
 
@@ -20,6 +22,8 @@ class Settings:
     remember: bool = True
     ffmpeg_location: str = ""
     auto_check_updates: bool = True
+    save_thumbnails: bool = False
+    accent_theme: str = "Orange"
 
 
 class SettingsManager:
@@ -48,6 +52,8 @@ class SettingsManager:
                 defaults.video_quality = "Best available"
             if defaults.audio_quality not in AUDIO_QUALITIES:
                 defaults.audio_quality = "192 kbps"
+            if defaults.accent_theme not in THEMES:
+                defaults.accent_theme = "Orange"
             if not defaults.output_dir.strip():
                 defaults.output_dir = Settings().output_dir
         except FileNotFoundError:

@@ -17,6 +17,7 @@ from downloader.models import DownloadItem, TERMINAL_STATES
 from downloader.process import ProcessTree
 from downloader.utils import friendly_error, normalize_youtube_url, output_directory
 from runtime import helper_command
+from error_reporting import ErrorReport, error_code
 
 
 class DownloadManager:
@@ -30,6 +31,7 @@ class DownloadManager:
         self._condition = threading.Condition(threading.RLock())
         self._stop = threading.Event()
         self._cancel = threading.Event()
+        self._events = queue.Queue()
         self._command = worker_command or helper_command("download-worker")
         self._thread = threading.Thread(target=self._dispatch, name="download-queue", daemon=True)
         self._thread.start()
@@ -38,12 +40,12 @@ class DownloadManager:
         with self._condition:
             return [replace(item) for item in self.items]
 
-    def add(self, url: str, format: str, quality: str, output_dir: str) -> DownloadItem:
+    def add(self, url: str, format: str, quality: str, output_dir: str, save_thumbnails: bool = False) -> DownloadItem:
         url = normalize_youtube_url(url)
         if format not in ("MP4", "MP3") or quality not in (VIDEO_QUALITIES if format == "MP4" else AUDIO_QUALITIES):
             raise ValueError("Choose a valid format and quality.")
         folder = output_directory(output_dir)
-        item = DownloadItem(url, format, quality, str(folder), title=f"YouTube video · {url.rsplit('=', 1)[-1]}")
+        item = DownloadItem(url, format, quality, str(folder), title=f"YouTube video · {url.rsplit('=', 1)[-1]}", save_thumbnails=bool(save_thumbnails))
         with self._condition:
             if self._stop.is_set():
                 raise ValueError("The application is closing.")
@@ -86,7 +88,7 @@ class DownloadManager:
         with self._condition:
             for index, item in enumerate(self.items):
                 if item.id == item_id and item.state in ("Failed", "Cancelled") and item.id != self.active_id:
-                    self.items[index] = DownloadItem(item.url, item.format, item.quality, item.output_dir, id=item.id, title=item.title)
+                    self.items[index] = DownloadItem(item.url, item.format, item.quality, item.output_dir, id=item.id, title=item.title, save_thumbnails=item.save_thumbnails)
             if self.auto_start and not self._paused:
                 self.running = True
             self._condition.notify_all()
@@ -104,6 +106,14 @@ class DownloadManager:
     def alive(self) -> bool:
         return self._thread.is_alive()
 
+    def events(self):
+        events = []
+        while True:
+            try:
+                events.append(self._events.get_nowait())
+            except queue.Empty:
+                return events
+
     def _dispatch(self) -> None:
         while not self._stop.is_set():
             with self._condition:
@@ -119,9 +129,14 @@ class DownloadManager:
             except Exception as error:
                 with self._condition:
                     item.state, item.error = "Failed", friendly_error(error)
+                    item.error_code = error_code(error)
                     item.stage = "Download failed"
             finally:
                 with self._condition:
+                    if item.state == "Failed":
+                        self._events.put(ErrorReport.create(item.error, "Download " + item.format, item.error_code))
+                    elif item.warning_code:
+                        self._events.put(ErrorReport.create(item.warning, "Save thumbnail", item.warning_code))
                     item.speed, item.eta = 0, None
                     self.active_id = None
                     if not any(i.state == "Waiting" for i in self.items):
@@ -188,6 +203,7 @@ class DownloadManager:
                 if item.state not in TERMINAL_STATES:
                     item.state, item.stage = "Failed", "Download failed"
                     item.error = "The download worker stopped unexpectedly. Check dependencies in Settings and retry."
+                    item.error_code = "SYTD-WORKER"
         finally:
             if tree:
                 tree.close()
@@ -214,12 +230,14 @@ class DownloadManager:
 
     def _apply_event(self, item: DownloadItem, event: dict) -> None:
         kind = event.get("event")
-        for key in ("title", "actual_quality", "progress", "downloaded_bytes", "total_bytes", "speed", "eta", "stage", "filename", "warning", "error"):
+        for key in ("title", "actual_quality", "progress", "downloaded_bytes", "total_bytes", "speed", "eta", "stage", "filename", "thumbnail_filename", "warning", "warning_code", "error", "error_code"):
             if key in event:
                 setattr(item, key, event[key])
         if kind == "completed":
             item.state, item.stage, item.progress = "Completed", "Saved to your folder", 1.0
         elif kind == "error":
             item.state, item.stage = "Failed", "Download failed"
+            if not item.error_code:
+                item.error_code = error_code(item.error)
         if item.state in TERMINAL_STATES and not any(i.state == "Waiting" for i in self.items):
             self.running = False

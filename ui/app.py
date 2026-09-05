@@ -13,15 +13,18 @@ import pygame
 
 from app_version import APP_VERSION
 from config.settings import AUDIO_QUALITIES, VIDEO_QUALITIES, SettingsManager
+from config.themes import THEMES, accent_for
 from downloader.dependencies import ROOT, dependency_status
 from downloader.manager import DownloadManager
 from downloader.process import ProcessTree
 from downloader.utils import output_directory
 from ui.native import clipboard_get, clipboard_set, open_folder
-from ui.widgets import ACCENT, BG, BORDER, FAINT, FIELD, GREEN, MUTED, PANEL, RED, SIDEBAR, TEXT, Painter, TextInput, blend
+from ui.widgets import BG, BORDER, FAINT, FIELD, GREEN, MUTED, PANEL, RED, SIDEBAR, TEXT, Painter, TextInput, blend
 from runtime import helper_command
 from update_service import UpdateService
 from ui.update_dialog import UpdateDialog
+from ui.error_dialog import ErrorDialog
+from error_reporting import ErrorReport
 
 
 @dataclass
@@ -59,21 +62,22 @@ class App:
                 pass
         pygame.display.init()
         pygame.font.init()
-        pygame.display.set_caption("YouTube Downloader")
+        pygame.display.set_caption("SimpleYTDownloader")
         self.surface = pygame.display.set_mode(size, pygame.RESIZABLE)
-        self.p = Painter(self.surface)
+        self.settings_manager = settings_manager or SettingsManager()
+        self.settings = self.settings_manager.settings
+        self.p = Painter(self.surface, accent_for(self.settings.accent_theme))
         icon_surface = pygame.Surface((48, 48), pygame.SRCALPHA)
         icon_painter = Painter(icon_surface)
         icon_painter.panel(pygame.Rect(0, 0, 48, 48), PANEL, None, 12)
-        icon_painter.icon("download", (24, 24), ACCENT, 28)
+        icon_painter.icon("download", (24, 24), self.p.accent, 28)
         pygame.display.set_icon(icon_surface)
         pygame.key.set_repeat(400, 35)
         pygame.key.start_text_input()
-        self.settings_manager = settings_manager or SettingsManager()
-        self.settings = self.settings_manager.settings
         self.manager = manager or DownloadManager(self.settings.auto_start, self.settings.ffmpeg_location)
         self.updates = update_service or UpdateService()
         self.update_dialog = UpdateDialog(self)
+        self.error_dialog = ErrorDialog(self)
         self.dependencies = dependency_status(self.settings.ffmpeg_location)
         self.page = "Download"
         self.format = self.settings.default_format
@@ -109,8 +113,10 @@ class App:
         if check_updates and self.settings.auto_check_updates:
             self.updates.check()
 
-    def notify(self, message, error=False):
+    def notify(self, message, error=False, code="", context=""):
         self.notice = (message, error, time.monotonic() + (3600 if error else 4))
+        if error:
+            self.error_dialog.show(ErrorReport.create(message, context or self.page, code))
 
     def save_preferences(self):
         try:
@@ -149,7 +155,7 @@ class App:
     def add_to_queue(self):
         try:
             quality = self.video_quality if self.format == "MP4" else self.audio_quality
-            self.manager.add(self.inputs["url"].text, self.format, quality, self.inputs["output"].text)
+            self.manager.add(self.inputs["url"].text, self.format, quality, self.inputs["output"].text, self.settings.save_thumbnails)
             self.settings.output_dir = self.inputs["output"].text.strip()
             self.inputs["settings_output"].set(self.settings.output_dir)
             saved = self.save_preferences()
@@ -157,8 +163,6 @@ class App:
             self.focus = "url"
             if saved:
                 self.notify("Added to your queue. " + ("Download starting." if self.manager.running else "Start it from the Queue page."))
-            else:
-                self.notify("Added to queue, but preferences could not be saved. Check access to the configuration folder.", True)
         except (OSError, ValueError) as error:
             self.notify(str(error), True)
 
@@ -199,6 +203,13 @@ class App:
         setattr(self.settings, key, value)
         if key == "auto_start":
             self.manager.auto_start = value
+        elif key == "accent_theme":
+            self.p.accent = accent_for(value)
+            icon = pygame.Surface((48, 48), pygame.SRCALPHA)
+            painter = Painter(icon, self.p.accent)
+            painter.panel(pygame.Rect(0, 0, 48, 48), painter.tint, None, 12)
+            painter.icon("download", (24, 24), self.p.accent, 28)
+            pygame.display.set_icon(icon)
         elif key == "auto_check_updates":
             if value:
                 self.updates.check()
@@ -214,7 +225,10 @@ class App:
         for event, manual in self.updates.events():
             if self.closing:
                 continue
-            if event in ("available", "error", "cancelled"):
+            if event == "error":
+                self.update_dialog.visible = False
+                self.notify(self.updates.snapshot().message, True, context="Application update")
+            elif event in ("available", "cancelled"):
                 self.update_dialog.show()
             elif event == "latest" and manual:
                 self.notify("No newer published release is available.")
@@ -263,14 +277,14 @@ class App:
         amount = self.hover.get(key, 0)
         amount += ((1 if over else 0) - amount) * min(1, self.dt * 16)
         self.hover[key] = amount
-        base = TEXT if primary else (48, 42, 40) if selected else FIELD if not quiet else SIDEBAR
+        base = self.p.accent if primary else self.p.tint if selected else FIELD if not quiet else SIDEBAR
         color = blend(base, (255, 255, 255) if primary else (57, 61, 69), amount * (0.15 if primary else 0.8))
         if self.pressed == key:
             color = blend(color, (0, 0, 0), 0.15)
-        text_color = BG if primary else ACCENT if selected else TEXT
+        text_color = BG if primary else self.p.accent if selected else TEXT
         if not enabled:
             color, text_color = FIELD, FAINT
-        border = ACCENT if selected or self.focus == key else BORDER if not primary else None
+        border = self.p.accent if selected or self.focus == key else BORDER if not primary else None
         self.p.panel(rect, color, border, 9)
         font = self.p.font(14, True)
         total = font.size(label)[0] + (26 if icon else 0)
@@ -295,6 +309,8 @@ class App:
             if x + w > initial + width and x != initial:
                 x, y = initial, y + 44
             self.button(f"{prefix}:{value}", label, (x, y, w, 36), lambda v=value: action(v), selected=value == selected)
+            if prefix == "theme":
+                pygame.draw.rect(self.surface, accent_for(value), (x + 12, y + 31, w - 24, 2), border_radius=1)
             x += w + 8
         return y + 36
 
@@ -315,11 +331,11 @@ class App:
     def draw_sidebar(self, width, height, items):
         pygame.draw.rect(self.surface, SIDEBAR, (0, 0, width, height))
         pygame.draw.line(self.surface, BORDER, (width - 1, 0), (width - 1, height))
-        self.p.panel(pygame.Rect(24 if width > 100 else 22, 29, 40, 40), (48, 35, 31), None, 12)
-        self.p.icon("download", (44 if width > 100 else 42, 49), ACCENT, 23)
+        self.p.panel(pygame.Rect(24 if width > 100 else 22, 29, 40, 40), self.p.tint, None, 12)
+        self.p.icon("download", (44 if width > 100 else 42, 49), self.p.accent, 23)
         if width > 100:
-            self.p.text("YTD", (76, 28), 22, TEXT, True)
-            self.p.text("DESKTOP", (77, 56), 10, MUTED, True)
+            self.p.text("Simple", (76, 29), 20, TEXT, True)
+            self.p.text("YTDownloader", (77, 56), 10, self.p.accent, True)
             self.p.text("WORKSPACE", (24, 116), 10, FAINT, True)
         for index, name in enumerate(("Download", "Queue", "Settings", "About")):
             y = 148 + index * (58 if width > 100 else 76)
@@ -333,18 +349,18 @@ class App:
                 self.p.panel(rect, blend((30, 33, 39) if selected else SIDEBAR, (40, 43, 49), self.hover[key]), None, 10)
             color = TEXT if selected else MUTED
             if selected:
-                pygame.draw.rect(self.surface, ACCENT, (13, y + 16, 3, 17), border_radius=2)
+                pygame.draw.rect(self.surface, self.p.accent, (13, y + 16, 3, 17), border_radius=2)
             if width > 100:
-                self.p.icon(name.lower(), (36, y + 24), ACCENT if selected else color, 19)
+                self.p.icon(name.lower(), (36, y + 24), self.p.accent if selected else color, 19)
                 self.p.text(name, (56, y + 13), 14, color, selected)
                 if name == "Queue" and items:
                     self.p.text(str(len(items)), (width - 34, y + 14), 12, MUTED)
             else:
-                self.p.icon(name.lower(), (width // 2, y + 22), ACCENT if selected else color, 21)
+                self.p.icon(name.lower(), (width // 2, y + 22), self.p.accent if selected else color, 21)
                 text_width = self.p.font(11).size(name)[0]
                 self.p.text(name, (width // 2 - text_width // 2, y + 40), 11, color)
             if self.focus == key:
-                pygame.draw.rect(self.surface, ACCENT, rect, 1, border_radius=10)
+                pygame.draw.rect(self.surface, self.p.accent, rect, 1, border_radius=10)
             self.register(key, rect, lambda value=name: self.navigate(value))
         self.p.text("v" + APP_VERSION, (24, height - 40), 11, FAINT)
         if width > 100:
@@ -352,6 +368,7 @@ class App:
 
     def draw(self):
         self.surface.fill(BG)
+        pygame.draw.rect(self.surface, self.p.accent, (0, 0, self.surface.get_width(), 3))
         self.hits = []
         w, h = self.surface.get_size()
         sidebar = 180 if w >= 1050 else 84
@@ -361,7 +378,7 @@ class App:
         content_width = min(880, area_width - 64)
         x = sidebar + (area_width - content_width) // 2
         self.p.text("WORKSPACE  /  " + self.page.upper(), (x, 32), 10, MUTED, True)
-        title = {"Download": "YouTube Downloader", "Queue": "Your download queue", "Settings": "Make it yours", "About": "A little about this app"}[self.page]
+        title = {"Download": "SimpleYTDownloader", "Queue": "Your download queue", "Settings": "Make it yours", "About": "A little about this app"}[self.page]
         self.p.text(title, (x, 71), 32, TEXT, True, content_width)
         subtitle = {"Download": "Your next watch, saved for later.", "Queue": "One at a time. Everything in its place.",
                     "Settings": "Set your defaults. Keep your flow.", "About": "Simple tools. Thoughtfully put together."}[self.page]
@@ -393,8 +410,8 @@ class App:
             thumb_y = track.y + (track.h - thumb_height) * self.scroll[self.page] / self.max_scroll
             pygame.draw.rect(self.surface, BORDER, (track.x, thumb_y, 4, thumb_height), border_radius=2)
         pygame.draw.line(self.surface, BORDER, (sidebar, h - 41), (w, h - 41))
-        self.p.text("PYTHON + PYGAME", (x, h - 27), 10, FAINT, True)
-        footer = "One download at a time" if self.page == "Queue" else "Ctrl+V to paste  ·  Enter to add" if self.page == "Download" else "YouTube Downloader  /  " + APP_VERSION
+        self.p.text(self.settings.accent_theme.upper() + " THEME  /  v" + APP_VERSION, (x, h - 27), 10, self.p.accent, True)
+        footer = "One download at a time" if self.page == "Queue" else "Ctrl+V to paste  ·  Enter to add" if self.page == "Download" else "SimpleYTDownloader  /  " + APP_VERSION
         fw = self.p.font(11).size(footer)[0]
         self.p.text(footer, (x + content_width - fw, h - 28), 11, MUTED)
         if self.fade > 0:
@@ -402,7 +419,7 @@ class App:
             veil = pygame.Surface(self.view.size, pygame.SRCALPHA)
             veil.fill((*BG, int(100 * self.fade / 0.13)))
             self.surface.blit(veil, self.view)
-        if self.notice:
+        if self.notice and not self.error_dialog.visible:
             message, error, until = self.notice
             if time.monotonic() > until:
                 self.notice = None
@@ -415,6 +432,8 @@ class App:
                 self.register("dismiss", close, lambda: setattr(self, "notice", None))
         if self.update_dialog.visible and not self.closing:
             self.update_dialog.draw()
+        if self.error_dialog.visible and not self.closing:
+            self.error_dialog.draw()
         if self.closing:
             veil = pygame.Surface((w, h), pygame.SRCALPHA)
             veil.fill((0, 0, 0, 190))
@@ -440,7 +459,7 @@ class App:
         self.p.panel(pygame.Rect(x, y, width, card_height))
         left = x + 28
         self.p.text("NEW DOWNLOAD", (left, y + 23), 10, MUTED, True)
-        self.p.text("01", (x + width - 47, y + 19), 16, FAINT)
+        self.p.text("MP4 + MP3", (x + width - 100, y + 23), 10, self.p.accent, True)
         self.input("url", (left, y + 53, inner - 100, 54))
         self.button("paste", "Paste", (x + width - 118, y + 53, 90, 54), self.paste)
         self.p.text("FORMAT", (left, y + 132), 10, MUTED, True)
@@ -454,7 +473,7 @@ class App:
         self.p.text("SAVE TO", (left, end + 45), 10, MUTED, True)
         self.folder_field("output", left, end + 67, inner)
         self.p.icon("check", (left + 8, end + 140), GREEN, 15)
-        self.p.text("Original titles. Windows-safe filenames.", (left + 24, end + 130), 12, MUTED, width=inner - 245)
+        self.p.text("Thumbnail included" if self.settings.save_thumbnails else "Original titles. Safe filenames.", (left + 24, end + 130), 12, MUTED, width=inner - 245)
         self.button("add", "Add to Queue", (x + width - 219, end + 122, 191, 43), self.add_to_queue, primary=True, icon="plus")
         bottom = y + card_height
         waiting = sum(i.state == "Waiting" for i in items)
@@ -475,7 +494,7 @@ class App:
             warnings.append("A JavaScript runtime may be needed for YouTube. See the dependency setup in Settings.")
         for warning in warnings:
             bottom += 14
-            bottom += self.p.wrap(warning, (x + 4, bottom), width - 8, 12, ACCENT)
+            bottom += self.p.wrap(warning, (x + 4, bottom), width - 8, 12, self.p.accent)
         return bottom
 
     def draw_queue(self, x, y, width, items):
@@ -488,7 +507,7 @@ class App:
         if not items:
             self.p.panel(pygame.Rect(x, y, width, 280))
             self.p.panel(pygame.Rect(x + width // 2 - 30, y + 43, 60, 60), FIELD, BORDER, 18)
-            self.p.icon("queue", (x + width // 2, y + 73), ACCENT, 28)
+            self.p.icon("queue", (x + width // 2, y + 73), self.p.accent, 28)
             label = "Good things start with a link."
             label_width = self.p.font(22, True).size(label)[0]
             self.p.text(label, (x + (width - label_width) // 2, y + 126), 22, TEXT, True)
@@ -497,16 +516,16 @@ class App:
             self.button("new", "Add a download", (x + width // 2 - 89, y + 211, 178, 40), lambda: self.navigate("Download"), icon="plus")
             return y + 280
         for item in items:
-            height = 200 if item.error else 158
+            height = 200 if item.error or item.warning else 158
             if y + height < self.view.top or y > self.view.bottom:
                 y += height + 14
                 continue
             self.p.panel(pygame.Rect(x, y, width, height))
             self.p.panel(pygame.Rect(x + 20, y + 20, 36, 36), FIELD, BORDER, 9)
-            self.p.icon("video" if item.format == "MP4" else "audio", (x + 38, y + 38), ACCENT, 18)
+            self.p.icon("video" if item.format == "MP4" else "audio", (x + 38, y + 38), self.p.accent, 18)
             self.p.text(item.title, (x + 70, y + 16), 16, TEXT, True, width - 221)
             self.p.text(item.url, (x + 70, y + 42), 11, FAINT, width=width - 221)
-            color = GREEN if item.state == "Completed" else RED if item.state == "Failed" else ACCENT if item.state == "Downloading" else MUTED
+            color = GREEN if item.state == "Completed" else RED if item.state == "Failed" else self.p.accent if item.state == "Downloading" else MUTED
             self.p.text(item.state, (x + width - 117, y + 19), 12, color, True)
             quality = item.quality
             if item.actual_quality and item.actual_quality != item.quality:
@@ -517,7 +536,7 @@ class App:
             pygame.draw.rect(self.surface, FIELD, progress, border_radius=2)
             if item.progress:
                 pygame.draw.rect(self.surface, color, (progress.x, progress.y, int(progress.w * max(0, min(1, item.progress))), 4), border_radius=2)
-            stage = item.stage
+            stage = ("Saved with thumbnail" if item.thumbnail_filename else item.stage)
             if item.state == "Downloading" and item.speed:
                 stage = f"{bytes_label(item.speed)}/s   ·   ETA {eta_label(item.eta)}   ·   {bytes_label(item.downloaded_bytes)}"
             self.p.text(stage, (x + 20, y + 118), 12, MUTED, width=width - 265)
@@ -528,14 +547,33 @@ class App:
             else:
                 self.button("folder:" + item.id, "Folder", (x + width - 178, y + 116, 76, 29), lambda path=item.output_dir: self.open_output(path))
             self.button("remove:" + item.id, "Remove", (x + width - 94, y + 116, 74, 29), lambda i=item.id: self.manager.remove(i), enabled=item.id != self.manager.active_id)
-            if item.error:
-                self.p.wrap(item.error, (x + 20, y + 155), width - 114, 12, RED, 18, 2)
-                self.button("error:" + item.id, "Copy", (x + width - 80, y + 160, 60, 28), lambda error=item.error: self.copy_error(error))
+            if item.error or item.warning:
+                message = item.error or item.warning
+                code = item.error_code or item.warning_code
+                self.p.wrap((code + "  ·  " if code else "") + message, (x + 20, y + 155), width - 120, 12, RED if item.error else self.p.accent, 18, 2)
+                self.button("error:" + item.id, "Details", (x + width - 94, y + 160, 74, 28),
+                            lambda m=message, c=code: self.error_dialog.show(ErrorReport.create(m, "Download", c)))
             y += height + 14
         return y
 
     def draw_settings(self, x, y, width):
         inner = width - 48
+        appearance_height = 84 + self.choices_height(THEMES, inner)
+        self.p.panel(pygame.Rect(x, y, width, appearance_height))
+        self.p.text("APPEARANCE", (x + 24, y + 19), 10, self.p.accent, True)
+        self.p.text("Pick your accent colour", (x + 24, y + 43), 16, TEXT, True)
+        self.choices("theme", THEMES, self.settings.accent_theme, x + 24, y + 73, inner,
+                     lambda value: self.setting("accent_theme", value))
+        y += appearance_height + 16
+        self.p.panel(pygame.Rect(x, y, width, 108))
+        self.p.text("DOWNLOAD EXTRAS", (x + 24, y + 18), 10, self.p.accent, True)
+        self.p.text("Save video thumbnails", (x + 24, y + 43), 15, TEXT, True)
+        self.p.text("Save an image beside each MP4 or MP3. Applies to new queue items.",
+                    (x + 24, y + 74), 12, MUTED, width=width - 140)
+        thumbnails = self.settings.save_thumbnails
+        self.button("toggle:save_thumbnails", "ON" if thumbnails else "OFF", (x + width - 93, y + 38, 69, 36),
+                    lambda value=thumbnails: self.setting("save_thumbnails", not value), selected=thumbnails)
+        y += 124
         self.p.panel(pygame.Rect(x, y, width, 174))
         self.p.text("APPLICATION UPDATES", (x + 24, y + 20), 10, MUTED, True)
         self.p.text("Check automatically at startup", (x + 24, y + 48), 14, TEXT, True)
@@ -586,9 +624,9 @@ class App:
                   ("JavaScript runtime", next(iter(status["javascript"]), "Missing — install Deno or Node.js"), bool(status["javascript"]))]
         for index, (name, detail, ok) in enumerate(checks):
             row = y + 54 + index * 30
-            pygame.draw.circle(self.surface, GREEN if ok else ACCENT, (x + 29, row + 10), 3)
+            pygame.draw.circle(self.surface, GREEN if ok else self.p.accent, (x + 29, row + 10), 3)
             self.p.text(name, (x + 44, row), 13, TEXT)
-            self.p.text(detail, (x + 205, row), 13, GREEN if ok else ACCENT, width=width - 235)
+            self.p.text(detail, (x + 205, row), 13, GREEN if ok else self.p.accent, width=width - 235)
         self.p.text(status["ffmpeg"] or "FFmpeg is needed for MP3 conversion and separate video/audio streams.", (x + 24, y + 214), 11, FAINT, width=inner)
         y += 264
         self.p.wrap("Dependency setup and update commands are in README.md. Settings are stored in a small local JSON file. Turning Remember settings off removes the saved preferences.", (x + 2, y), width - 4, 12, MUTED)
@@ -596,10 +634,10 @@ class App:
 
     def draw_about(self, x, y, width):
         self.p.panel(pygame.Rect(x, y, width, 396))
-        self.p.panel(pygame.Rect(x + 32, y + 32, 65, 65), (48, 35, 31), None, 19)
-        self.p.icon("download", (x + 64, y + 64), ACCENT, 34)
-        self.p.text("YouTube Downloader", (x + 32, y + 126), 28, TEXT, True)
-        self.p.text("Version " + APP_VERSION, (x + 33, y + 174), 13, ACCENT)
+        self.p.panel(pygame.Rect(x + 32, y + 32, 65, 65), self.p.tint, None, 19)
+        self.p.icon("download", (x + 64, y + 64), self.p.accent, 34)
+        self.p.text("SimpleYTDownloader", (x + 32, y + 126), 28, TEXT, True)
+        self.p.text("Version " + APP_VERSION, (x + 33, y + 174), 13, self.p.accent)
         self.p.wrap("A clean Python + Pygame downloader using yt-dlp. Save videos or audio with a considered interface and a queue that stays out of your way.", (x + 32, y + 219), width - 64, 16, MUTED)
         pygame.draw.line(self.surface, BORDER, (x + 32, y + 308), (x + width - 32, y + 308))
         self.p.text("PYTHON", (x + 32, y + 337), 11, MUTED, True)
@@ -634,7 +672,15 @@ class App:
             return
         if self.closing:
             return
-        if self.update_dialog.visible:
+        if self.error_dialog.visible:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.error_dialog.close()
+                return
+            if event.type in (pygame.TEXTINPUT, pygame.MOUSEWHEEL):
+                return
+            if event.type == pygame.KEYDOWN and event.key not in (pygame.K_TAB, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                return
+        elif self.update_dialog.visible:
             if event.type == pygame.MOUSEWHEEL:
                 self.update_dialog.notes_scroll = max(0, min(2200, self.update_dialog.notes_scroll - event.y * 35))
                 return
@@ -696,6 +742,10 @@ class App:
             self.handle_event(event)
         self.poll_picker()
         self.poll_updates()
+        for report in self.manager.events():
+            if not self.closing:
+                self.error_dialog.show(report)
+        self.error_dialog.poll()
         if self.closing and not self.manager.alive and self.picker is None and not self.updates.alive:
             self.running = False
         self.draw()

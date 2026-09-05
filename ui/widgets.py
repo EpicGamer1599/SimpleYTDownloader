@@ -27,9 +27,14 @@ def blend(a, b, amount):
 
 
 class Painter:
-    def __init__(self, surface):
+    def __init__(self, surface, accent=ACCENT):
         self.surface = surface
         self.fonts = {}
+        self.accent = accent
+
+    @property
+    def tint(self):
+        return blend(PANEL, self.accent, 0.12)
 
     def font(self, size=16, bold=False):
         key = (size, bold)
@@ -202,7 +207,7 @@ class TextInput:
 
     def draw(self, painter, rect, focused):
         self.rect = pygame.Rect(rect)
-        painter.panel(rect, FIELD, ACCENT if focused else BORDER, 10)
+        painter.panel(rect, FIELD, painter.accent if focused else BORDER, 10)
         old_clip = painter.surface.get_clip()
         painter.surface.set_clip(self.rect.inflate(-28, -8).clip(old_clip))
         font = painter.font(16)
@@ -216,8 +221,8 @@ class TextInput:
         if focused and start != end:
             left = font.size(self.text[:start])[0]
             right = font.size(self.text[:end])[0]
-            pygame.draw.rect(painter.surface, (72, 65, 62), (origin + left, y, right - left, font.get_height()))
+            pygame.draw.rect(painter.surface, blend(FIELD, painter.accent, 0.3), (origin + left, y, right - left, font.get_height()))
         painter.text(self.text or self.placeholder, (origin, y), color=TEXT if self.text else FAINT)
         if focused and math.sin(pygame.time.get_ticks() / 180) > -0.3:
-            pygame.draw.line(painter.surface, ACCENT, (origin + caret, y + 2), (origin + caret, y + font.get_height() - 2), 2)
+            pygame.draw.line(painter.surface, painter.accent, (origin + caret, y + 2), (origin + caret, y + font.get_height() - 2), 2)
         painter.surface.set_clip(old_clip)

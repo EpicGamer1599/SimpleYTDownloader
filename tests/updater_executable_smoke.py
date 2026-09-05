@@ -11,7 +11,9 @@ import tempfile
 import threading
 import time
 import unittest
+import zipfile
 from ctypes import wintypes
+from dataclasses import asdict, replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,7 +82,13 @@ class PackagedUpdaterTests(unittest.TestCase):
         self.install = self.directory / "Writable installation with spaces"
         self.install.mkdir()
         self.target = self.install / EXE_NAME
-        shutil.copyfile(BASE / "dist" / EXE_NAME, self.target)
+        self.previous_version = APP_VERSION
+        if self._testMethodName == "test_upgrade_from_1_0_0":
+            with zipfile.ZipFile(BASE / "Builds" / "1.0.0.zip") as archive:
+                self.target.write_bytes(archive.read(EXE_NAME))
+            self.previous_version = "1.0.0"
+        else:
+            shutil.copyfile(BASE / "dist" / EXE_NAME, self.target)
         self.original_hash = file_hash(self.target)
         self.environment = patch.dict(os.environ, {"YTD_CONFIG_DIR": str(self.directory / "settings")})
         self.environment.start()
@@ -124,7 +132,7 @@ class PackagedUpdaterTests(unittest.TestCase):
         payload = self.root / "payload"
         payload.mkdir()
         staged = payload / EXE_NAME
-        shutil.copyfile(self.target, staged)
+        shutil.copyfile(BASE / "dist" / EXE_NAME, staged)
         # Change an unused DOS-stub byte, leaving Windows PE headers, the
         # PyInstaller archive, and APP_VERSION intact; this makes replacement
         # verifiable by hash without building or publishing a fake release.
@@ -134,6 +142,9 @@ class PackagedUpdaterTests(unittest.TestCase):
             stream.seek(0x40)
             stream.write(bytes([value ^ 1]))
         self.plan = prepare_plan(self.target, staged, expected_version, self.original_pid, threading.Event())
+        # The old frozen app would create its plan with its own APP_VERSION.
+        self.plan = replace(self.plan, previous_version=self.previous_version)
+        atomic_json(self.root / "plan.json", asdict(self.plan))
         self.assertNotEqual(self.plan.original_sha256, self.plan.new_sha256)
         self.helper = launch_executable(self.root / "update-helper.exe", [
             "--apply-update", str(self.root / "plan.json"), "--update-token", self.plan.token])
@@ -178,6 +189,12 @@ class PackagedUpdaterTests(unittest.TestCase):
 
     def test_successful_replacement_restart_and_cleanup(self):
         self.transaction()
+
+    @unittest.skipUnless((BASE / "Builds" / "1.0.0.zip").is_file(), "Previous release ZIP required")
+    def test_upgrade_from_1_0_0(self):
+        self.transaction()
+        self.record["previous_version"] = "1.0.0"
+        self.record["new_version"] = APP_VERSION
 
     def test_failed_new_version_startup_restores_and_restarts_old(self):
         self.transaction(rollback=True)

@@ -8,6 +8,8 @@ from pathlib import Path
 
 from downloader.dependencies import find_ffmpeg, find_js_runtime
 from downloader.utils import friendly_error, publish_file
+from downloader.thumbnails import download_thumbnail
+from error_reporting import error_code
 
 
 def build_options(job: dict, ffmpeg: str | None) -> dict:
@@ -89,6 +91,8 @@ class QuietLogger:
 
 
 def execute(job: dict, emit) -> None:
+    thumbnail = None
+    thumbnail_warning = ""
     try:
         from yt_dlp import YoutubeDL
     except ImportError:
@@ -112,13 +116,27 @@ def execute(job: dict, emit) -> None:
         reporter.stream_count = max(1, len(info.get("requested_formats") or []))
         emit({"event": "metadata", "title": title, "actual_quality": actual})
         ydl.process_info(info)
+        if job.get("save_thumbnails", False):
+            emit({"event": "processing", "stage": "Saving the video thumbnail", "speed": 0, "eta": None})
+            try:
+                thumbnail = download_thumbnail(ydl, info, Path(job["work_dir"]))
+            except Exception:
+                thumbnail_warning = "The media was downloaded, but its thumbnail could not be saved. It may be unavailable, unsupported, or temporarily unreachable."
     extension = job["format"].lower()
     source = Path(job["work_dir"]) / f"media.{extension}"
     if not source.is_file() or source.stat().st_size == 0:
         raise RuntimeError(f"No {extension.upper()} file was produced. Check the selected format and FFmpeg installation.")
     emit({"event": "processing", "stage": "Saving your file", "progress": 0.99})
     result = publish_file(source, Path(job["output_dir"]), title, extension)
-    emit({"event": "completed", "filename": str(result), "title": title, "progress": 1.0})
+    thumbnail_filename = ""
+    if thumbnail:
+        try:
+            thumbnail_filename = str(publish_file(thumbnail, result.parent, result.stem, thumbnail.suffix[1:]))
+        except (OSError, ValueError):
+            thumbnail_warning = "The media was saved, but its thumbnail could not be copied to the output folder. Check folder permissions and disk space."
+    if thumbnail_warning:
+        emit({"event": "warning", "warning": thumbnail_warning, "warning_code": "SYTD-THUMBNAIL"})
+    emit({"event": "completed", "filename": str(result), "thumbnail_filename": thumbnail_filename, "title": title, "progress": 1.0})
 
 
 def main() -> int:
@@ -131,7 +149,7 @@ def main() -> int:
         return 0
     except Exception as error:
         message = str(error) if isinstance(error, (ImportError, RuntimeError)) else friendly_error(error)
-        emit({"event": "error", "error": message[:380]})
+        emit({"event": "error", "error": message[:380], "error_code": error_code(error)})
         return 1
 
 

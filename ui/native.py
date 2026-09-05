@@ -122,7 +122,7 @@ def windows_folder_picker(initial: str, owner: int = 0) -> str:
         options = wintypes.DWORD()
         check(method(dialog, 10, ctypes.POINTER(wintypes.DWORD))(dialog, ctypes.byref(options)))
         check(method(dialog, 9, wintypes.DWORD)(dialog, options.value | 0x20 | 0x40 | 0x800 | 0x8))
-        check(method(dialog, 17, wintypes.LPCWSTR)(dialog, "YouTube Downloader — Choose a folder"))
+        check(method(dialog, 17, wintypes.LPCWSTR)(dialog, "SimpleYTDownloader — Choose a folder"))
         check(method(dialog, 18, wintypes.LPCWSTR)(dialog, "Select Folder"))
         if os.path.isdir(initial):
             shell_iid = GUID.parse("43826d1e-e718-42ee-bc55-a1e261c37bfe")
@@ -153,7 +153,7 @@ def folder_picker(initial: str, owner: int = 0) -> str:
     root.attributes("-topmost", True)
     try:
         return filedialog.askdirectory(parent=root, initialdir=initial if os.path.isdir(initial) else os.path.expanduser("~"),
-                                       title="YouTube Downloader — Choose a folder", mustexist=True)
+                                       title="SimpleYTDownloader — Choose a folder", mustexist=True)
     finally:
         root.destroy()
 

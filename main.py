@@ -1,4 +1,4 @@
-"""Launch YouTube Downloader with `python main.py`."""
+"""Launch SimpleYTDownloader with `python main.py`."""
 from __future__ import annotations
 
 import argparse
@@ -25,7 +25,7 @@ def main() -> int:
         helper_parser.add_argument("--update-token", required=True)
         helper_args = helper_parser.parse_args()
         return helper_main(helper_args.apply_update, helper_args.update_token)
-    parser = argparse.ArgumentParser(description="YouTube Downloader — Python desktop application")
+    parser = argparse.ArgumentParser(description="SimpleYTDownloader — Python desktop application")
     from app_version import APP_VERSION
     parser.add_argument("--version", action="version", version=APP_VERSION)
     parser.add_argument("--smoke-test", type=float, metavar="SECONDS", help="Open the real GUI and close it after a short test")
@@ -36,9 +36,9 @@ def main() -> int:
     parser.add_argument("--update-token", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if sys.version_info < (3, 10):
-        message = "YouTube Downloader requires Python 3.10 or newer. Install Python, then install requirements.txt."
+        message = "SimpleYTDownloader requires Python 3.10 or newer. Install Python, then install requirements.txt."
         if os.name == "nt":
-            ctypes.windll.user32.MessageBoxW(None, message, "YouTube Downloader", 0x10)
+            ctypes.windll.user32.MessageBoxW(None, message, "SimpleYTDownloader", 0x10)
         print(message, file=sys.stderr)
         return 1
     try:
@@ -46,7 +46,7 @@ def main() -> int:
     except ImportError:
         message = "pygame is missing. From this folder, run:\n\npython -m pip install -r requirements.txt\n\nThen launch main.py again."
         if os.name == "nt":
-            ctypes.windll.user32.MessageBoxW(None, message, "YouTube Downloader — Setup required", 0x10)
+            ctypes.windll.user32.MessageBoxW(None, message, "SimpleYTDownloader — Setup required", 0x10)
         print(message, file=sys.stderr)
         return 1
     from ui.app import App
@@ -55,7 +55,8 @@ def main() -> int:
     if update_plan:
         from updater import acknowledge_startup
         try:
-            app.notify(acknowledge_startup(update_plan, args.update_token, bool(args.update_rollback)))
+            app.notify(acknowledge_startup(update_plan, args.update_token, bool(args.update_rollback)),
+                       error=bool(args.update_rollback), code="SYTD-UPDATE", context="Update rollback")
         except Exception:
             app.close()
             return 1
@@ -64,4 +65,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except Exception as error:
+        from error_reporting import show_fatal_error
+        show_fatal_error(error)
+        raise SystemExit(1)
