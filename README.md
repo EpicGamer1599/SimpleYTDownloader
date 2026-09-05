@@ -41,14 +41,14 @@
 
 ## Quick start
 
-1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the `SimpleYTDownloader-vX.Y.Z.zip` asset.
+1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the application ZIP asset (for example, `1.0.2.zip` or `SimpleYTDownloader-v1.0.2.zip`).
 2. Extract **`SimpleYTDownloader.exe`** into a writable folder and launch it.
 3. Paste a video URL on **Download**, choose **MP4** or **MP3**, and select your quality and output folder.
 4. Click **Add to Queue**, open **Queue**, and click **Start queue**.
 
-> **Version 1.0.1 build:** [Builds/1.0.1.zip](Builds/1.0.1.zip) contains the application EXE. The GitHub updater asset is named `SimpleYTDownloader-v1.0.1.zip`. The [1.0.0 build](Builds/1.0.0.zip) is also retained.
+> **Version 1.0.2 build:** [Builds/1.0.2.zip](Builds/1.0.2.zip) contains the application EXE. For users updating from 1.0.0 or the original 1.0.1 build, upload `dist/SimpleYTDownloader-v1.0.2.zip` to the GitHub Release. The [1.0.0](Builds/1.0.0.zip) and [1.0.1](Builds/1.0.1.zip) builds are retained.
 
-See [what changed in 1.0.1](docs/releases/1.0.1.md) for the release notes.
+See [what changed in 1.0.2](docs/releases/1.0.2.md) for the release notes, or the [1.0.1 features](docs/releases/1.0.1.md).
 
 ### Media tools
 
@@ -143,6 +143,8 @@ Finish or cancel waiting/active queue items before installing an update. **Cance
 
 Only published stable releases qualify. Commits, tags without a published release, drafts, prereleases, GitHub's generated source ZIPs, and equal/older versions do not trigger an installation. Source checkouts can check releases and display their details; automatic installation requires the packaged Windows EXE in a writable folder.
 
+Starting with **1.0.2**, the checker reads the release's actual attached assets and accepts a single ZIP regardless of its filename, including `1.0.3.zip`. If several ZIPs are attached, it prefers the unique `SimpleYTDownloader-vX.Y.Z.zip`; otherwise it reports the ambiguity. The release description is shown as notes, including when an asset check fails. Links in descriptions are never used as executable download sources. A manual asset error opens a reportable popup; closing it reveals the release details and the reason installation is unavailable.
+
 <details>
 <summary><strong>Verification, installation, and rollback</strong></summary>
 
@@ -212,7 +214,7 @@ If YouTube changes cause extraction errors, update yt-dlp in the project environ
 The application version has one source of truth: **[app_version.py](app_version.py)**.
 
 ```python
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 ```
 
 For the next release, set a strictly higher stable semantic version, then follow these steps:
@@ -229,16 +231,19 @@ For the next release, set a strictly higher stable semantic version, then follow
 3. **Create a GitHub Release.** Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases) → Draft a new release**, select/create the matching tag, add a name and release notes, and upload the ZIP. Publish it as the latest stable release with prerelease unchecked.
 4. **Check the metadata.** Verify the [latest-release API response](https://api.github.com/repos/EpicGamer1599/SimpleYTDownloader/releases/latest). The tag, asset name, repository URLs, size, and `digest` must match. GitHub supplies `digest` as `sha256:...` for newly uploaded assets. Assets without it are rejected; re-upload an older asset if necessary.
 
-| Application version | GitHub release tag | Required uploaded asset |
+| Application version | GitHub release tag (with or without `v`) | Recommended asset, required by old clients |
 | :--- | :--- | :--- |
 | `1.0.0` | `v1.0.0` | `SimpleYTDownloader-v1.0.0.zip` |
 | `1.0.1` | `v1.0.1` | `SimpleYTDownloader-v1.0.1.zip` |
+| `1.0.2` | `v1.0.2` | `SimpleYTDownloader-v1.0.2.zip` |
 | `1.1.0` | `v1.1.0` | `SimpleYTDownloader-v1.1.0.zip` |
+
+**Compatibility with installed 1.0.0 / original 1.0.1:** those EXEs still require the standard filename above. Publish the 1.0.2 bridge release with `SimpleYTDownloader-v1.0.2.zip` so they can receive this fix, or let users manually extract `Builds/1.0.2.zip`. Changing source code or release descriptions cannot change the updater inside an already installed EXE. Once users run 1.0.2, a future release with just `1.0.3.zip` works too. Keeping the standard name on future releases also supports users who skip versions.
 
 The ZIP must contain **exactly one file at its root**:
 
 ```text
-SimpleYTDownloader-v1.0.1.zip
+SimpleYTDownloader-v1.0.2.zip
 └── SimpleYTDownloader.exe
 ```
 

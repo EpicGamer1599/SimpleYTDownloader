@@ -11,7 +11,7 @@ from pathlib import Path
 
 from app_version import APP_VERSION
 from downloader.process import ProcessTree
-from update_checker import EXE_NAME, GitHubClient, Release, UpdateCancelled, UpdateError, check_cancelled
+from update_checker import EXE_NAME, GitHubClient, Release, ReleaseAssetError, ReleaseDetails, UpdateCancelled, UpdateError, check_cancelled
 from updater import atomic_json, cleanup_stage, create_stage, extract_update, launch_executable, prepare_plan, read_json
 
 
@@ -19,7 +19,7 @@ from updater import atomic_json, cleanup_stage, create_stage, extract_update, la
 class UpdateSnapshot:
     state: str = "idle"
     message: str = "Updates have not been checked yet."
-    release: Release | None = None
+    release: ReleaseDetails | None = None
     received: int = 0
     total: int = 0
 
@@ -84,6 +84,10 @@ class UpdateService:
                         self._events.put(("latest", True))
             except UpdateCancelled:
                 self._set(state="idle", message="Update check cancelled.")
+            except ReleaseAssetError as error:
+                self._set(state="error", release=error.release, message=self._error(error))
+                if manual:
+                    self._events.put(("error", True))
             except Exception as error:
                 self._set(state="error", release=None, message=self._error(error))
                 if manual:
@@ -91,8 +95,11 @@ class UpdateService:
         return self._start(action, {"state": "checking", "message": "Checking published GitHub releases…", "release": None})
 
     def download_and_install(self):
-        release = self.snapshot().release
-        if not release or not self.install_supported:
+        snapshot = self.snapshot()
+        release = snapshot.release
+        if snapshot.state != "available" or not isinstance(release, Release):
+            return False
+        if not self.install_supported:
             self._set(message="Run SimpleYTDownloader.exe to install application updates automatically.")
             return False
 

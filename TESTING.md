@@ -1,6 +1,34 @@
 # Verification results
 
-Latest verification: Windows, 2026-09-06. Earlier 1.0.0 results are retained below.
+Latest verification: Windows, 2026-09-06. Earlier 1.0.0 and 1.0.1 results are retained below.
+
+## Version 1.0.2
+
+Fixed release asset selection to accept the official release's single attached ZIP, including short filenames. With multiple ZIPs, the standard versioned filename is preferred; ambiguous downloads are rejected. Release name, version, and description are retained when asset validation fails, and closing the error report shows those details. The application version is now 1.0.2 because 1.0.1 was already published.
+
+| Verification | Result |
+| --- | --- |
+| Syntax compilation and imports | Passed for entry point, version, checker, service, updater, UI, tests, and packaging modules |
+| `python -m unittest discover -v` | **74 passed**, no skips, in 39.087 seconds |
+| One-file/windowed PyInstaller build | Exit code 0; packaged `--version` verified as **1.0.2** |
+| `python -m tests.updater_executable_smoke` | **4 passed** in 43.048 seconds |
+| Live release API check | New source checker, using comparison version 1.0.0, accepted the published **1.0.1.zip** and read **1,613 characters** of release description |
+| Release ZIP integrity | Both ZIPs passed CRC checks and contain only the hash-matching EXE at their root |
+
+The nine added regressions cover short/custom/encoded ZIP filenames, tags with and without `v`, preferred and ambiguous assets, release details after asset failure, rejection of description links/generated source archives/path filenames, verified download and extraction of a short-named ZIP, retained repository/hash protections, quiet automatic errors, and GUI release-note visibility after closing the error popup. The source suite also exercises the existing media, queue, thumbnail, theme, and reporting features. The previous packaged media suite was not rerun for this updater-only change.
+
+The four packaged helper tests verified cancellation before handoff, replacement/relaunch/cleanup, failed-startup rollback, and an actual **1.0.0 → 1.0.2** transaction using the old executable from `Builds/1.0.0.zip`. Installation tests use disposable local copies. The live check was metadata-only: no GitHub release was changed, downloaded for execution, or installed into a production application. The 1.0.0 EXE's network checker is unchanged; it still requires a standard versioned release asset to reach this fix.
+
+Artifacts:
+
+- `dist/SimpleYTDownloader.exe`: **27,242,459 bytes**, SHA-256 `5c95aca63a8825a9d58490b5ef3de7bf9733efb0e6c7adbec6e1a203ca817a56`.
+- `dist/SimpleYTDownloader-v1.0.2.zip` and `Builds/1.0.2.zip`: **26,967,312 bytes** each, SHA-256 `04e5e7c0f4a603cbe879c91e435d5cb41efc2b62b73dc6f624e9e363eec33c8b`.
+- `test-artifacts/tests-1.0.2.log`, `build-1.0.2.log`, and `updater-1.0.2.log`: check/build logs.
+- `test-artifacts/release-1.0.2.json` and `live-release-1.0.2.json`: artifact hashes and validated API release details.
+- `test-artifacts/update-notes-1.0.2.png`: visually reviewed release details and asset error in the actual Pygame UI.
+- `docs/releases/1.0.2.md`: release notes and instructions for reaching installed old clients.
+
+No dependencies were added. Repository restrictions, SHA-256/size verification, ZIP/executable validation, background operations, and the helper/startup protocol remain in place. Previously published 1.0.0 and 1.0.1 ZIPs are retained. The existing Windows permissions, antivirus, power-interruption, and startup-acknowledgement limitations below still apply.
 
 ## Version 1.0.1
 

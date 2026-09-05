@@ -11,12 +11,14 @@ import time
 import unittest
 import zipfile
 from pathlib import Path
+from dataclasses import replace
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request
 
 from app_version import APP_VERSION
-from update_checker import API_ROOT, EXE_NAME, LATEST_RELEASE_URL, RELEASE_ROOT, GitHubClient, RestrictedRedirects, SemVersion, UpdateCancelled, UpdateError, parse_release
+from update_checker import API_ROOT, EXE_NAME, LATEST_RELEASE_URL, RELEASE_ROOT, GitHubClient, ReleaseAssetError, RestrictedRedirects, SemVersion, UpdateCancelled, UpdateError, parse_release
 from update_service import UpdateService
 from updater import atomic_json, cleanup_stage, create_stage, extract_update, file_hash, load_plan, prepare_plan, read_json, replace_and_launch
 
@@ -39,14 +41,15 @@ def zip_bytes(content=None, name=EXE_NAME):
     return output.getvalue()
 
 
-def release_data(version="1.1.0", archive=None):
+def release_data(version="1.1.0", archive=None, asset_name=None, tag=None):
     archive = archive or zip_bytes()
-    name = f"SimpleYTDownloader-v{version}.zip"
+    name = asset_name or f"SimpleYTDownloader-v{version}.zip"
+    tag = tag or "v" + version
     return {"id": 12, "url": API_ROOT + "/releases/12", "draft": False, "prerelease": False,
-            "published_at": "2026-09-05T10:00:00Z", "tag_name": "v" + version, "name": "A better downloader",
+            "published_at": "2026-09-05T10:00:00Z", "tag_name": tag, "name": "A better downloader",
             "body": "Improved downloads.\nFixed queue handling.", "assets": [
                 {"id": 34, "name": name, "state": "uploaded", "url": API_ROOT + "/releases/assets/34",
-                 "browser_download_url": f"{RELEASE_ROOT}/download/v{version}/{name}", "size": len(archive),
+                 "browser_download_url": f"{RELEASE_ROOT}/download/{quote(tag, safe='')}/{quote(name, safe='')}", "size": len(archive),
                  "digest": "sha256:" + hashlib.sha256(archive).hexdigest()}]}
 
 
@@ -101,6 +104,52 @@ class VersionAndReleaseTests(unittest.TestCase):
         self.assertEqual(release.asset_name, "SimpleYTDownloader-v1.1.0.zip")
         self.assertIn("Fixed queue", release.notes)
 
+    def test_single_zip_accepts_short_or_custom_names_and_both_tag_styles(self):
+        for name in ("1.0.1.zip", "Windows build.ZIP", "SimpleYTDownloader.zip", "Windows-\u00e9.zip"):
+            for tag in ("1.0.1", "v1.0.1"):
+                with self.subTest(name=name, tag=tag):
+                    data = release_data("1.0.1", asset_name=name, tag=tag)
+                    data["assets"].append({"name": "checksums.txt"})
+                    release = parse_release(data, "1.0.0")
+                    self.assertEqual(release.asset_name, name)
+                    self.assertEqual(release.download_url, data["assets"][0]["browser_download_url"])
+                    self.assertEqual(release.notes, data["body"])
+
+    def test_prefer_standard_zip_when_release_has_multiple_zips(self):
+        data = release_data()
+        preferred = data["assets"][0]
+        data["assets"].insert(0, release_data(asset_name="1.1.0.zip")["assets"][0])
+        self.assertEqual(parse_release(data).asset_name, preferred["name"])
+        data["assets"].append(preferred.copy())
+        with self.assertRaises(ReleaseAssetError):
+            parse_release(data)
+
+    def test_asset_errors_preserve_release_name_version_and_description(self):
+        for assets in ([], None, [release_data(asset_name="first.zip")["assets"][0],
+                                  release_data(asset_name="second.zip")["assets"][0]]):
+            data = release_data()
+            data["assets"] = assets
+            with self.assertRaises(ReleaseAssetError) as failure:
+                parse_release(data)
+            self.assertEqual(failure.exception.release.name, data["name"])
+            self.assertEqual(failure.exception.release.notes, data["body"])
+            self.assertEqual(failure.exception.release.version, "1.1.0")
+
+    def test_description_links_and_generated_source_archives_are_not_assets(self):
+        data = release_data()
+        data.update(assets=[], body="Download: https://evil.test/1.1.0.zip",
+                    zipball_url=API_ROOT + "/zipball/v1.1.0")
+        with self.assertRaisesRegex(ReleaseAssetError, "no attached ZIP"):
+            parse_release(data)
+
+    def test_zip_names_cannot_be_paths_or_urls(self):
+        for name in ("../update.zip", "nested/update.zip", "C:\\update.zip", "https://evil.test/update.zip",
+                     "bad\x00.zip", "bad\n.zip", "bad\ud800.zip", ".zip"):
+            with self.subTest(name=repr(name)), self.assertRaises(UpdateError):
+                data = release_data()
+                data["assets"][0]["name"] = name
+                parse_release(data)
+
     def test_wrong_repository_and_arbitrary_asset_url_rejected(self):
         for field, value in (("url", "https://api.github.com/repos/attacker/fake/releases/assets/34"),
                              ("browser_download_url", "https://github.com/attacker/fake/releases/download/v1.1.0/SimpleYTDownloader-v1.1.0.zip"),
@@ -129,6 +178,30 @@ class VersionAndReleaseTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_short_named_zip_downloads_verifies_and_extracts(self):
+        archive = zip_bytes()
+        data = release_data("1.0.1", archive, "1.0.1.zip", "1.0.1")
+        opener = Opener(archive)
+        client = GitHubClient(lambda *args: opener)
+        release = parse_release(data, "1.0.0")
+        with tempfile.TemporaryDirectory() as directory:
+            stage = create_stage(Path(directory))
+            target = stage / "release.zip"
+            client.download(release, target, threading.Event(), lambda *args: None)
+            self.assertEqual(opener.requests[0].full_url, data["assets"][0]["browser_download_url"])
+            self.assertEqual(extract_update(target, stage, threading.Event()).read_bytes(), pe_bytes())
+
+    def test_alternative_zip_cannot_bypass_repository_or_download_integrity(self):
+        archive = zip_bytes()
+        release = parse_release(release_data(archive=archive, asset_name="1.1.0.zip"))
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "release.zip"
+            for changed in (replace(release, download_url="https://evil.test/1.1.0.zip"),
+                            replace(release, asset_name="../1.1.0.zip"), replace(release, sha256="0" * 64)):
+                with self.assertRaises(UpdateError):
+                    GitHubClient(lambda *args: Opener(archive)).download(changed, target, threading.Event(), lambda *args: None)
+                self.assertFalse(target.exists())
+
     def test_uses_only_latest_release_api(self):
         opener = Opener(json.dumps(release_data()).encode())
         client = GitHubClient(lambda *args: opener)
@@ -354,6 +427,18 @@ class BackgroundTests(unittest.TestCase):
         service.check(manual=True)
         self.wait(service)
         self.assertEqual(service.events(), [("error", True)])
+
+    def test_asset_error_keeps_notes_without_allowing_install_or_startup_popup(self):
+        data = release_data()
+        data["assets"] = []
+        service = UpdateService(GitHubClient(lambda *args: Opener(json.dumps(data).encode())))
+        for manual in (False, True):
+            service.check(manual=manual)
+            self.wait(service)
+            self.assertEqual(service.snapshot().state, "error")
+            self.assertEqual(service.snapshot().release.notes, data["body"])
+            self.assertFalse(service.download_and_install())
+            self.assertEqual(service.events(), [("error", True)] if manual else [])
 
     def test_no_newer_release_does_nothing_automatic_and_reports_manual(self):
         class Client:

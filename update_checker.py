@@ -89,17 +89,29 @@ class SemVersion:
 
 
 @dataclass(frozen=True)
-class Release:
+class ReleaseDetails:
     version: str
     tag: str
     name: str
     notes: str
+
+
+@dataclass(frozen=True)
+class Release(ReleaseDetails):
     asset_name: str
     download_url: str
     size: int
     sha256: str
     release_id: int
     asset_id: int
+
+
+class ReleaseAssetError(UpdateError):
+    """Keep trusted release details available when its download cannot be used."""
+
+    def __init__(self, message: str, release: ReleaseDetails):
+        super().__init__(message)
+        self.release = release
 
 
 def display_text(value, limit):
@@ -129,14 +141,38 @@ def parse_release(data: dict, current_version: str = APP_VERSION) -> Release | N
     parsed = SemVersion.parse(version)
     if parsed.prerelease or parsed <= SemVersion.parse(current_version):
         return None
-    asset_name = f"SimpleYTDownloader-v{version}.zip"
+    details = ReleaseDetails(version, tag, display_text(data.get("name"), 200) or tag,
+                             display_text(data.get("body"), 12000))
+    try:
+        return select_release_asset(data, details)
+    except UpdateError as error:
+        raise ReleaseAssetError(str(error), details) from error
+
+
+def valid_zip_name(name) -> bool:
+    """Accept an actual asset basename; never a path or a URL from release notes."""
+    return (isinstance(name, str) and 4 < len(name) <= 255 and name.lower().endswith(".zip")
+            and all(c.isprintable() and c not in '/\\<>:"|?*' and not 0xD800 <= ord(c) <= 0xDFFF
+                    for c in name))
+
+
+def select_release_asset(data: dict, details: ReleaseDetails) -> Release:
+    version, tag = details.version, details.tag
     assets = data.get("assets")
     if not isinstance(assets, list):
         raise UpdateError("The newer release has malformed download assets.")
-    matches = [a for a in assets if isinstance(a, dict) and a.get("name") == asset_name]
+    zips = [a for a in assets if isinstance(a, dict) and isinstance(a.get("name"), str)
+            and a["name"].lower().endswith(".zip")]
+    preferred = f"SimpleYTDownloader-v{version}.zip"
+    matches = [a for a in zips if a["name"] == preferred] or zips
+    if not matches:
+        raise UpdateError("The newer release has no attached ZIP. The publisher must upload a ZIP containing SimpleYTDownloader.exe.")
     if len(matches) != 1:
-        raise UpdateError(f"The newer release is missing its unique {asset_name} asset. Try again after the release is corrected.")
+        raise UpdateError(f"The newer release has multiple ZIPs. The publisher must attach one ZIP or name the application ZIP {preferred}.")
     asset = matches[0]
+    asset_name = asset["name"]
+    if not valid_zip_name(asset_name):
+        raise UpdateError("The update ZIP has an invalid filename.")
     expected = f"{RELEASE_ROOT}/download/{quote(tag, safe='')}/{quote(asset_name, safe='')}"
     if (type(asset.get("id")) is not int or asset["id"] <= 0 or asset.get("state") != "uploaded"
             or asset.get("url") != f"{API_ROOT}/releases/assets/{asset['id']}"
@@ -148,8 +184,7 @@ def parse_release(data: dict, current_version: str = APP_VERSION) -> Release | N
     digest = asset.get("digest")
     if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest):
         raise UpdateError("GitHub has not supplied a SHA-256 digest for this ZIP. The publisher must re-upload the release asset.")
-    return Release(version, tag, display_text(data.get("name"), 200) or tag,
-                   display_text(data.get("body"), 12000), asset_name, expected, size,
+    return Release(version, tag, details.name, details.notes, asset_name, expected, size,
                    digest[7:].lower(), data["id"], asset["id"])
 
 
@@ -207,7 +242,7 @@ class GitHubClient:
     def download(self, release: Release, destination: Path, cancel: threading.Event, progress) -> None:
         # Derive the only acceptable starting URL instead of accepting user-configured endpoints.
         expected = f"{RELEASE_ROOT}/download/{quote(release.tag, safe='')}/{quote(release.asset_name, safe='')}"
-        if release.download_url != expected or release.asset_name != f"SimpleYTDownloader-v{release.version}.zip":
+        if release.download_url != expected or not valid_zip_name(release.asset_name):
             raise UpdateError("The release download address is invalid.")
         SemVersion.parse(release.version)
         if release.tag not in (release.version, "v" + release.version):

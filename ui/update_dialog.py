@@ -51,7 +51,7 @@ class UpdateDialog:
         p.panel(notes_box, FIELD, BORDER, 9)
         previous = app.surface.get_clip()
         app.surface.set_clip(notes_box.inflate(-20, -12))
-        notes = release.notes if release and release.notes else "The publisher did not provide release notes."
+        notes = (release.notes or "The publisher did not provide release notes.") if release else "Release details are unavailable."
         p.wrap(notes, (x + 12, notes_box.y + 10 - self.notes_scroll), inner - 24, 13, MUTED, 20, 120)
         app.surface.set_clip(previous)
         busy = snapshot.state in ("downloading", "extracting", "preparing", "installing", "restarting", "cancelling")

@@ -226,7 +226,10 @@ class App:
             if self.closing:
                 continue
             if event == "error":
-                self.update_dialog.visible = False
+                if self.updates.snapshot().release:
+                    self.update_dialog.show()
+                else:
+                    self.update_dialog.visible = False
                 self.notify(self.updates.snapshot().message, True, context="Application update")
             elif event in ("available", "cancelled"):
                 self.update_dialog.show()

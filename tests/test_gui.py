@@ -17,9 +17,9 @@ from config.settings import SettingsManager
 from downloader.manager import DownloadManager
 from ui.app import App
 from ui.native import clipboard_get, clipboard_set
-from update_checker import UpdateCancelled
+from update_checker import GitHubClient, UpdateCancelled
 from update_service import UpdateService
-from tests.test_updates import parse_release, release_data
+from tests.test_updates import Opener, parse_release, release_data
 from config.themes import THEMES
 from error_reporting import ErrorReport
 from urllib.parse import parse_qs, urlsplit
@@ -169,6 +169,28 @@ class GuiTests(unittest.TestCase):
         self.click("toggle:auto_check_updates")
         self.assertFalse(SettingsManager(Path(self.temp.name) / "config").settings.auto_check_updates)
         pygame.image.save(self.app.surface, ARTIFACTS / "update-settings.png")
+
+    def test_failed_asset_check_keeps_description_visible_after_error_popup(self):
+        import json
+        data = release_data()
+        data["assets"] = []
+        self.app.updates.shutdown()
+        self.app.updates = UpdateService(GitHubClient(lambda *args: Opener(json.dumps(data).encode())))
+        self.app.check_for_updates()
+        self.app.updates._thread.join(2)
+        self.app.step([])
+        self.assertTrue(self.app.error_dialog.visible)
+        self.click("error:close")
+        self.assertTrue(self.app.update_dialog.visible)
+        with patch.object(self.app.p, "wrap", wraps=self.app.p.wrap) as wrap:
+            self.app.draw()
+            self.assertIn(data["body"], [call.args[0] for call in wrap.call_args_list])
+        self.assertEqual(self.app.updates.snapshot().release.name, data["name"])
+        self.assertFalse(any(hit.key == "update:now" for hit in self.app.hits))
+        pygame.image.save(self.app.surface, ARTIFACTS / "update-notes-1.0.2.png")
+        self.click("update:later")
+        self.click("nav:Queue")
+        self.assertTrue(self.app.running)
 
     def test_update_download_progress_and_cancel_leave_gui_usable(self):
         entered = threading.Event()
