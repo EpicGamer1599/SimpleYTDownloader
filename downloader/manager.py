@@ -128,15 +128,19 @@ class DownloadManager:
                 self._run_item(item)
             except Exception as error:
                 with self._condition:
-                    item.state, item.error = "Failed", friendly_error(error)
-                    item.error_code = error_code(error)
-                    item.stage = "Download failed"
+                    if item.media_saved or item.state == "Completed":
+                        self._finish_saved_media(item, "The media was saved, but the worker could not finish: " + friendly_error(error))
+                    else:
+                        item.state, item.error = "Failed", friendly_error(error)
+                        item.error_code = error_code(error)
+                        item.stage = "Download failed"
             finally:
                 with self._condition:
                     if item.state == "Failed":
                         self._events.put(ErrorReport.create(item.error, "Download " + item.format, item.error_code))
                     elif item.warning_code:
-                        self._events.put(ErrorReport.create(item.warning, "Save thumbnail", item.warning_code))
+                        context = "Save thumbnail" if item.warning_code == "SYTD-THUMBNAIL" else "Download " + item.format
+                        self._events.put(ErrorReport.create(item.warning, context, item.warning_code))
                     item.speed, item.eta = 0, None
                     self.active_id = None
                     if not any(i.state == "Waiting" for i in self.items):
@@ -185,9 +189,11 @@ class DownloadManager:
                             # A file committed just before cancellation still counts as complete.
                             while not messages.empty():
                                 event = messages.get_nowait()
-                                if event and event.get("event") == "completed":
+                                if event:
                                     self._apply_event(item, event)
-                            if item.state != "Completed":
+                            if item.media_saved and item.state != "Completed":
+                                self._finish_saved_media(item, "The media was saved. Thumbnail saving was cancelled." if item.save_thumbnails else "The media was saved before cancellation.")
+                            elif item.state != "Completed":
                                 item.state, item.stage = "Cancelled", "Download cancelled"
                     break
                 try:
@@ -201,9 +207,12 @@ class DownloadManager:
             process.wait(timeout=5)
             with self._condition:
                 if item.state not in TERMINAL_STATES:
-                    item.state, item.stage = "Failed", "Download failed"
-                    item.error = "The download worker stopped unexpectedly. Check dependencies in Settings and retry."
-                    item.error_code = "SYTD-WORKER"
+                    if item.media_saved:
+                        self._finish_saved_media(item, "The media was saved, but the worker stopped before finishing its remaining work.")
+                    else:
+                        item.state, item.stage = "Failed", "Download failed"
+                        item.error = "The download worker stopped unexpectedly. Check dependencies in Settings and retry."
+                        item.error_code = "SYTD-WORKER"
         finally:
             if tree:
                 tree.close()
@@ -226,18 +235,32 @@ class DownloadManager:
                         shutil.rmtree(resolved)
                 except OSError:
                     with self._condition:
-                        item.warning = f"Temporary files could not be removed: {work_dir}"
+                        item.warning = (item.warning + " " if item.warning else "") + f"Temporary files could not be removed: {work_dir}"
+                        item.warning_code = item.warning_code or "SYTD-WORKER"
+
+    @staticmethod
+    def _finish_saved_media(item: DownloadItem, warning: str) -> None:
+        item.state, item.stage, item.progress = "Completed", "Media saved; see details", 1.0
+        item.error, item.error_code = "", ""
+        item.warning = warning
+        item.warning_code = "SYTD-THUMBNAIL" if item.save_thumbnails and not item.thumbnail_filename else "SYTD-WORKER"
 
     def _apply_event(self, item: DownloadItem, event: dict) -> None:
         kind = event.get("event")
         for key in ("title", "actual_quality", "progress", "downloaded_bytes", "total_bytes", "speed", "eta", "stage", "filename", "thumbnail_filename", "warning", "warning_code", "error", "error_code"):
             if key in event:
                 setattr(item, key, event[key])
-        if kind == "completed":
+        if kind == "media_saved":
+            item.media_saved = True
+        elif kind == "completed":
+            item.media_saved = True
             item.state, item.stage, item.progress = "Completed", "Saved to your folder", 1.0
         elif kind == "error":
-            item.state, item.stage = "Failed", "Download failed"
-            if not item.error_code:
-                item.error_code = error_code(item.error)
+            if item.media_saved:
+                self._finish_saved_media(item, "The media was saved, but remaining work failed: " + item.error)
+            else:
+                item.state, item.stage = "Failed", "Download failed"
+                if not item.error_code:
+                    item.error_code = error_code(item.error)
         if item.state in TERMINAL_STATES and not any(i.state == "Waiting" for i in self.items):
             self.running = False

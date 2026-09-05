@@ -1,6 +1,42 @@
 # Verification results
 
-Latest verification: Windows, 2026-09-06. Earlier 1.0.0 and 1.0.1 results are retained below.
+Latest verification: Windows, 2026-09-06. Earlier release results are retained below.
+
+## Version 1.0.3
+
+Reviewed the update transaction, HTTP client, download worker/queue, preference persistence, text rendering, and release dialog. Fixed concrete failure paths and rebuilt the application with `APP_VERSION = "1.0.3"`. No dependencies were added or upgraded.
+
+| Verification | Result |
+| --- | --- |
+| Syntax compilation and module imports | Passed for the entry point, updater, worker/queue, settings, UI, and packaging modules |
+| Final `python -m unittest discover -v` | **88 passed**, no skips, in 29.654 seconds |
+| `python -m tests.executable_smoke` | **7 passed** in 41.129 seconds |
+| `python -m tests.updater_executable_smoke` | **5 passed** in 35.529 seconds |
+| `python -m PyInstaller --onefile --windowed --name SimpleYTDownloader main.py` | Exit code 0; the packaged EXE exists and its `--version` reports **1.0.3** |
+| Live metadata-only GitHub check | Selected published **1.0.2.zip** and read **1,514 description characters**, using comparison version 1.0.0 to exercise the new checker |
+| ZIP integrity | Both ZIPs passed CRC checks and contain exactly the hash-matching `SimpleYTDownloader.exe` at their root |
+
+**100 tests passed** across the final source and packaged suites. An earlier 86-test source run also passed before the final streaming/deadline regressions were added; that earlier run is not included in the total.
+
+Regressions added for this release:
+
+- A failed terminal status write after successful replacement cannot trigger rollback. A failed status write after rollback does not report the restored running application as a failed launch. These disk/permission failures are simulated, and backup preservation is asserted.
+- Cancelling during thumbnail work keeps the already saved media, marks it completed with a warning, and removes staging. Worker crashes and reported errors after the media-save event also preserve the file and allow the queue to continue. Tests use actual isolated subprocesses. Thumbnail tests verify that the media file exists before the image request begins.
+- Concurrent preference writers use separate temporary files, with complete final JSON. A failed fsync preserves previous settings and removes its temporary file. Oversized, deeply nested, and invalid-encoding preferences recover with a warning.
+- Long release notes reach their final line without scrolling beyond short notes. A 12,000-character string is truncated using fewer than 20 font measurements. `test-artifacts/update-notes-1.0.3.png` was visually reviewed.
+- Failed HTTP responses close their bodies; incomplete transfers produce readable network errors. Cancellation is checked between available reads, release checks have an overall deadline, and a pre-existing partial download is never deleted by a failed new download attempt.
+
+The seven packaged media/native-picker tests verify MP4, MP3, separate-stream merging, optional thumbnails with both formats, a missing thumbnail preserving the media, disabled thumbnails, and the Windows folder dialog. The five real helper transactions verify success/relaunch/cleanup, failed-startup rollback, cancellation before handoff, **1.0.0 → 1.0.3**, and **1.0.2 → 1.0.3**. Old-client transactions use the actual EXEs from the preserved release ZIPs. All installation changes use disposable directories; no production installation or GitHub release was changed.
+
+Artifacts:
+
+- `dist/SimpleYTDownloader.exe`: **27,246,816 bytes**, SHA-256 `a238568d483dbe3bfa0e9e05c5ee7cf4351090a69537c60dfd54f01cd4175976`.
+- `dist/SimpleYTDownloader-v1.0.3.zip` and `Builds/1.0.3.zip`: **26,971,644 bytes** each, SHA-256 `ce92d783793cabe151995824aa06a33fdbf2becdd6c39b39dafe4eed4d642e75`.
+- `test-artifacts/tests-1.0.3.log`, `build-1.0.3.log`, `packaged-media-1.0.3.log`, and `updater-1.0.3.log`: detailed results.
+- `test-artifacts/release-1.0.3.json` and `live-release-1.0.3.json`: artifact hashes and validated release metadata.
+- `docs/releases/1.0.3.md`: release notes and publisher instructions.
+
+Limits: older installed EXEs continue to use their bundled updater helper until replaced, so the terminal-status fix protects updates initiated from 1.0.3 onward. Blocked status writes or cleanup may leave recovery files behind. Abrupt power loss, antivirus-specific locks, other Windows architectures/installations, and future YouTube behavior are not exhaustively tested. A media file committed just before a forced process kill is retained even if the worker has not yet delivered its save notification; in that narrow window the queue may still label the attempt cancelled. An active GitHub socket read can take up to its 10-second timeout before cancellation/deadline handling resumes. The previous media dependency and startup-acknowledgement limits still apply.
 
 ## Version 1.0.2
 

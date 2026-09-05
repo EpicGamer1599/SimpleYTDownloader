@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from functools import total_ordering
+from http.client import HTTPException
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
@@ -25,6 +26,7 @@ MAX_DOWNLOAD = 256 * 1024 * 1024
 MAX_EXPANDED = 512 * 1024 * 1024
 CHUNK_SIZE = 64 * 1024
 TIMEOUT = 10
+CHECK_DEADLINE = 30
 
 
 class UpdateError(Exception):
@@ -38,6 +40,12 @@ class UpdateCancelled(UpdateError):
 def check_cancelled(cancel: threading.Event) -> None:
     if cancel.is_set():
         raise UpdateCancelled("Update cancelled. Your installed application has not changed.")
+
+
+def response_chunk(response, size: int) -> bytes:
+    # HTTPResponse.read(size) may keep waiting for size bytes while a server
+    # trickles data. read1 returns available data so deadlines/cancel are checked.
+    return getattr(response, "read1", response.read)(size)
 
 
 @total_ordering
@@ -220,21 +228,31 @@ class GitHubClient:
 
     def latest(self, cancel: threading.Event, current_version=APP_VERSION) -> Release | None:
         check_cancelled(cancel)
+        deadline = time.monotonic() + CHECK_DEADLINE
         try:
             with self.opener_factory(RestrictedRedirects()).open(
                     self.request(LATEST_RELEASE_URL, "application/vnd.github+json"), timeout=TIMEOUT) as response:
-                raw = response.read(1024 * 1024 + 1)
+                raw = bytearray()
+                while True:
+                    check_cancelled(cancel)
+                    if time.monotonic() > deadline:
+                        raise UpdateError("The GitHub update check timed out. Please try again later.")
+                    chunk = response_chunk(response, min(CHUNK_SIZE, 1024 * 1024 + 1 - len(raw)))
+                    raw.extend(chunk)
+                    if len(raw) > 1024 * 1024:
+                        raise UpdateError("GitHub returned an unexpectedly large release response.")
+                    if not chunk:
+                        break
             check_cancelled(cancel)
-            if len(raw) > 1024 * 1024:
-                raise UpdateError("GitHub returned an unexpectedly large release response.")
             return parse_release(json.loads(raw), current_version)
         except HTTPError as error:
+            error.close()
             if error.code == 404:
                 return None
             if error.code in (403, 429):
                 raise UpdateError("GitHub is limiting update checks. Try again later.") from None
             raise UpdateError("GitHub is temporarily unavailable. You can keep using the app and try again later.") from None
-        except (URLError, TimeoutError, OSError):
+        except (URLError, TimeoutError, OSError, HTTPException):
             raise UpdateError("Could not check GitHub. Check your internet connection and try again.") from None
         except (ValueError, UnicodeError):
             raise UpdateError("GitHub returned malformed release data. Try again later.") from None
@@ -249,6 +267,7 @@ class GitHubClient:
             raise UpdateError("The release tag and asset version do not match.")
         check_cancelled(cancel)
         partial = destination.with_suffix(".part")
+        partial_created = False
         received, digest = 0, hashlib.sha256()
         deadline = time.monotonic() + 600
         try:
@@ -258,11 +277,12 @@ class GitHubClient:
                 if length and (not length.isdecimal() or int(length) != release.size):
                     raise UpdateError("The update download size does not match its GitHub release metadata.")
                 with partial.open("xb") as output:
+                    partial_created = True
                     while True:
                         check_cancelled(cancel)
                         if time.monotonic() > deadline:
                             raise UpdateError("The update download timed out. Please try again.")
-                        chunk = response.read(CHUNK_SIZE)
+                        chunk = response_chunk(response, CHUNK_SIZE)
                         if not chunk:
                             break
                         received += len(chunk)
@@ -275,7 +295,11 @@ class GitHubClient:
             if received != release.size or digest.hexdigest() != release.sha256:
                 raise UpdateError("The update ZIP is incomplete or failed SHA-256 verification. Please try again.")
             partial.replace(destination)
-        except (HTTPError, URLError, TimeoutError):
+        except HTTPError as error:
+            error.close()
+            raise UpdateError("The update download failed. Check your connection and try again.") from None
+        except (URLError, TimeoutError, HTTPException):
             raise UpdateError("The update download failed. Check your connection and try again.") from None
         finally:
-            partial.unlink(missing_ok=True)
+            if partial_created:
+                partial.unlink(missing_ok=True)

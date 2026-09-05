@@ -3,6 +3,8 @@ import json
 import os
 import tempfile
 import unittest
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -71,6 +73,46 @@ class ValidationTests(unittest.TestCase):
 
 
 class SettingsTests(unittest.TestCase):
+    def test_simultaneous_saves_use_independent_atomic_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            first, second = SettingsManager(folder), SettingsManager(folder)
+            first.settings.default_format, first.settings.accent_theme = "MP3", "Blue"
+            second.settings.default_format, second.settings.accent_theme = "MP4", "Gold"
+            barrier = threading.Barrier(2)
+            original = Path.replace
+            def replace(source, target):
+                barrier.wait(timeout=3)
+                return original(source, target)
+            with patch.object(Path, "replace", replace), ThreadPoolExecutor(max_workers=2) as pool:
+                saves = [pool.submit(manager.save) for manager in (first, second)]
+                for result in saves:
+                    result.result(timeout=5)
+            loaded = SettingsManager(folder)
+            self.assertFalse(loaded.warning)
+            self.assertIn((loaded.settings.default_format, loaded.settings.accent_theme), (("MP3", "Blue"), ("MP4", "Gold")))
+            self.assertEqual([p.name for p in folder.iterdir()], ["settings.json"])
+
+    def test_failed_settings_save_preserves_old_file_and_cleans_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = SettingsManager(Path(directory))
+            manager.save()
+            original = manager.path.read_bytes()
+            manager.settings.accent_theme = "Blue"
+            with patch("config.settings.os.fsync", side_effect=OSError("disk full")), self.assertRaises(OSError):
+                manager.save()
+            self.assertEqual(manager.path.read_bytes(), original)
+            self.assertEqual([p.name for p in Path(directory).iterdir()], ["settings.json"])
+
+    def test_oversized_deeply_nested_and_invalid_encoding_settings_recover(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            for data in (b" " * 65537, b"[" * 2000 + b"0" + b"]" * 2000, b"\xff\xfe"):
+                path.write_bytes(data)
+                manager = SettingsManager(Path(directory))
+                self.assertTrue(manager.warning)
+                self.assertEqual(manager.settings.default_format, "MP4")
+
     def test_roundtrip_and_forget(self):
         with tempfile.TemporaryDirectory() as directory:
             manager = SettingsManager(Path(directory))

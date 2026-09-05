@@ -12,6 +12,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from dataclasses import replace
+from http.client import IncompleteRead
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -178,6 +179,67 @@ class VersionAndReleaseTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_trickling_responses_allow_check_and_download_cancellation(self):
+        for operation in ("latest", "download"):
+            cancel = threading.Event()
+            class Trickle(Response):
+                def read(self, size=-1):
+                    raise AssertionError("Do not wait for a full network buffer")
+                def read1(self, size=-1):
+                    cancel.set()
+                    return b"x"
+            response = Trickle(b"")
+            opener = Opener(b"")
+            opener.open = lambda *args, **kwargs: response
+            client = GitHubClient(lambda *args: opener)
+            with tempfile.TemporaryDirectory() as directory, self.assertRaises(UpdateCancelled):
+                if operation == "latest":
+                    client.latest(cancel)
+                else:
+                    client.download(parse_release(release_data()), Path(directory) / "release.zip", cancel, lambda *args: None)
+            self.assertTrue(response.closed)
+
+    def test_release_check_has_an_overall_deadline(self):
+        class Trickle(Response):
+            def read1(self, size=-1):
+                return b" "
+        response = Trickle(b"")
+        opener = Opener(b"")
+        opener.open = lambda *args, **kwargs: response
+        with patch("update_checker.time.monotonic", side_effect=[0, 0, 31]), self.assertRaisesRegex(UpdateError, "timed out"):
+            GitHubClient(lambda *args: opener).latest(threading.Event())
+        self.assertTrue(response.closed)
+
+    def test_failed_http_responses_are_closed(self):
+        for operation in ("latest", "download"):
+            body = io.BytesIO(b"server error")
+            failure = HTTPError(LATEST_RELEASE_URL, 500, "unavailable", {}, body)
+            client = GitHubClient(lambda *args: Opener(b"", failure=failure))
+            with tempfile.TemporaryDirectory() as directory, self.assertRaises(UpdateError):
+                if operation == "latest":
+                    client.latest(threading.Event())
+                else:
+                    client.download(parse_release(release_data()), Path(directory) / "release.zip", threading.Event(), lambda *args: None)
+            self.assertTrue(body.closed)
+
+    def test_interrupted_http_body_reports_network_error(self):
+        client = GitHubClient(lambda *args: Opener(b"", failure=IncompleteRead(b"short", 100)))
+        with self.assertRaisesRegex(UpdateError, "internet connection"):
+            client.latest(threading.Event())
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(UpdateError, "connection"):
+            client.download(parse_release(release_data()), Path(directory) / "release.zip", threading.Event(), lambda *args: None)
+
+    def test_download_does_not_delete_a_preexisting_partial_file(self):
+        archive = zip_bytes()
+        release = parse_release(release_data(archive=archive))
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "release.zip"
+            partial = target.with_suffix(".part")
+            partial.write_bytes(b"existing data")
+            with self.assertRaises(FileExistsError):
+                GitHubClient(lambda *args: Opener(archive)).download(release, target, threading.Event(), lambda *args: None)
+            self.assertEqual(partial.read_bytes(), b"existing data")
+
     def test_short_named_zip_downloads_verifies_and_extracts(self):
         archive = zip_bytes()
         data = release_data("1.0.1", archive, "1.0.1.zip", "1.0.1")
@@ -360,6 +422,36 @@ class ReplacementTests(unittest.TestCase):
             if not rollback:
                 raise UpdateError("new executable did not acknowledge startup")
         self.assertEqual(replace_and_launch(self.plan, launch), "rolled_back")
+        self.assertEqual(calls, [False, True])
+        self.assertEqual(self.target.read_bytes(), pe_bytes(b"old"))
+
+    def test_status_write_failure_after_success_never_rolls_back(self):
+        from updater import status as write_status
+        calls = []
+        def record(plan, state, message=""):
+            if state == "success":
+                raise OSError("disk full while recording status")
+            write_status(plan, state, message)
+        with patch("updater.status", side_effect=record):
+            self.assertEqual(replace_and_launch(self.plan, lambda p, rollback: calls.append(rollback)), "success")
+        self.assertEqual(calls, [False])
+        self.assertEqual(self.target.read_bytes(), pe_bytes())
+        self.assertEqual(self.plan.backup.read_bytes(), pe_bytes(b"old"))
+        self.assertFalse(self.plan.failed.exists())
+
+    def test_status_write_failure_after_rollback_keeps_old_app_running(self):
+        from updater import status as write_status
+        calls = []
+        def launch(plan, rollback):
+            calls.append(rollback)
+            if not rollback:
+                raise UpdateError("new app failed")
+        def record(plan, state, message=""):
+            if state == "rolled_back":
+                raise PermissionError("status file locked")
+            write_status(plan, state, message)
+        with patch("updater.status", side_effect=record):
+            self.assertEqual(replace_and_launch(self.plan, launch), "rolled_back")
         self.assertEqual(calls, [False, True])
         self.assertEqual(self.target.read_bytes(), pe_bytes(b"old"))
 

@@ -22,6 +22,7 @@ class DownloadItem:
     error: str = ""
     warning: str = ""
     filename: str = ""
+    media_saved: bool = False
     actual_quality: str = ""
     save_thumbnails: bool = False
     thumbnail_filename: str = ""

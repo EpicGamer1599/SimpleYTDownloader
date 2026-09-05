@@ -8,6 +8,7 @@ import time
 import unittest
 from ctypes import wintypes
 from pathlib import Path
+from dataclasses import replace
 from unittest.mock import PropertyMock, patch
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -191,6 +192,39 @@ class GuiTests(unittest.TestCase):
         self.click("update:later")
         self.click("nav:Queue")
         self.assertTrue(self.app.running)
+
+    def test_release_notes_scroll_to_last_line_without_overscrolling(self):
+        release = parse_release(release_data())
+        notes = "\n".join([f"Release note {i}" for i in range(200)] + ["FINAL RELEASE NOTE"])
+        self.app.updates._set(state="available", release=replace(release, notes=notes))
+        self.app.update_dialog.show()
+        self.app.draw()
+        self.app.step([pygame.event.Event(pygame.MOUSEWHEEL, y=-10000)])
+        self.assertGreater(self.app.update_dialog.notes_scroll, 2200)
+        with patch.object(self.app.p, "text", wraps=self.app.p.text) as text:
+            self.app.draw()
+            self.assertIn("FINAL RELEASE NOTE", [call.args[0] for call in text.call_args_list])
+        pygame.image.save(self.app.surface, ARTIFACTS / "update-notes-1.0.3.png")
+        self.app.updates._set(release=replace(release, notes="One short note"))
+        self.app.update_dialog.show()
+        self.app.draw()
+        self.app.step([pygame.event.Event(pygame.MOUSEWHEEL, y=-10000)])
+        self.assertEqual(self.app.update_dialog.notes_scroll, 0)
+
+    def test_long_text_truncation_uses_bounded_font_measurements(self):
+        font = self.app.p.font(14)
+        class CountingFont:
+            calls = 0
+            def size(self, value):
+                self.calls += 1
+                return font.size(value)
+            def render(self, *args):
+                return font.render(*args)
+        counter = CountingFont()
+        with patch.object(self.app.p, "font", return_value=counter):
+            result = self.app.p.text("x" * 12000, (0, 0), 14, width=200)
+        self.assertLess(counter.calls, 20)
+        self.assertLessEqual(result.w, 200)
 
     def test_update_download_progress_and_cancel_leave_gui_usable(self):
         entered = threading.Event()

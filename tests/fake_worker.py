@@ -14,6 +14,17 @@ def emit(**event):
 
 emit(event="metadata", title="Test video — a readable title", actual_quality="720p")
 video_id = job["url"].rsplit("=", 1)[-1]
+if video_id in ("THUMB000001", "CRASH000001", "SAVEERROR01"):
+    saved = Path(job["output_dir"]) / (video_id + ".mp4")
+    saved.write_bytes(b"completed media")
+    emit(event="media_saved", filename=str(saved))
+    emit(event="processing", stage="Saving the video thumbnail")
+    if video_id == "CRASH000001":
+        sys.exit(5)
+    if video_id == "SAVEERROR01":
+        emit(event="error", error="Thumbnail processing failed")
+        sys.exit(1)
+    time.sleep(120)
 if video_id == "FAIL0000001":
     emit(event="error", error="This video is private. Choose a publicly available video.")
     sys.exit(1)

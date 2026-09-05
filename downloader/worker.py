@@ -116,18 +116,21 @@ def execute(job: dict, emit) -> None:
         reporter.stream_count = max(1, len(info.get("requested_formats") or []))
         emit({"event": "metadata", "title": title, "actual_quality": actual})
         ydl.process_info(info)
+        extension = job["format"].lower()
+        source = Path(job["work_dir"]) / f"media.{extension}"
+        if not source.is_file() or source.stat().st_size == 0:
+            raise RuntimeError(f"No {extension.upper()} file was produced. Check the selected format and FFmpeg installation.")
+        emit({"event": "processing", "stage": "Saving your file", "progress": 0.99})
+        result = publish_file(source, Path(job["output_dir"]), title, extension)
+        # Keep completed media outside disposable staging before starting an
+        # optional network request that the user might cancel.
+        emit({"event": "media_saved", "filename": str(result), "title": title})
         if job.get("save_thumbnails", False):
             emit({"event": "processing", "stage": "Saving the video thumbnail", "speed": 0, "eta": None})
             try:
                 thumbnail = download_thumbnail(ydl, info, Path(job["work_dir"]))
             except Exception:
                 thumbnail_warning = "The media was downloaded, but its thumbnail could not be saved. It may be unavailable, unsupported, or temporarily unreachable."
-    extension = job["format"].lower()
-    source = Path(job["work_dir"]) / f"media.{extension}"
-    if not source.is_file() or source.stat().st_size == 0:
-        raise RuntimeError(f"No {extension.upper()} file was produced. Check the selected format and FFmpeg installation.")
-    emit({"event": "processing", "stage": "Saving your file", "progress": 0.99})
-    result = publish_file(source, Path(job["output_dir"]), title, extension)
     thumbnail_filename = ""
     if thumbnail:
         try:

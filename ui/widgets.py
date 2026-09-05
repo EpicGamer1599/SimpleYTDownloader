@@ -48,9 +48,16 @@ class Painter:
         font = self.font(size, bold)
         value = str(value)
         if width is not None and font.size(value)[0] > width:
-            while value and font.size(value + "…")[0] > max(0, width):
-                value = value[:-1]
-            value += "…"
+            # Binary search avoids thousands of measurements for long titles
+            # or unbroken URLs in release notes.
+            lower, upper = 0, len(value)
+            while lower < upper:
+                middle = (lower + upper + 1) // 2
+                if font.size(value[:middle] + "…")[0] <= max(0, width):
+                    lower = middle
+                else:
+                    upper = middle - 1
+            value = value[:lower] + "…"
         rendered = font.render(value, True, color)
         self.surface.blit(rendered, position)
         return rendered.get_rect(topleft=position)
@@ -69,7 +76,10 @@ class Painter:
                     line = (line + " " + word).strip()
             lines.append(line)
         for index, line in enumerate(lines[:max_lines]):
-            self.text(line, (x, y + index * line_height), size, color, width=width)
+            line_y = y + index * line_height
+            clip = self.surface.get_clip()
+            if line_y + line_height > clip.top and line_y < clip.bottom:
+                self.text(line, (x, line_y), size, color, width=width)
         return min(len(lines), max_lines) * line_height
 
     def panel(self, rect, color=PANEL, border=BORDER, radius=16):

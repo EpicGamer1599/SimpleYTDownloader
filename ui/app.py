@@ -685,7 +685,7 @@ class App:
                 return
         elif self.update_dialog.visible:
             if event.type == pygame.MOUSEWHEEL:
-                self.update_dialog.notes_scroll = max(0, min(2200, self.update_dialog.notes_scroll - event.y * 35))
+                self.update_dialog.notes_scroll = max(0, min(self.update_dialog.notes_max_scroll, self.update_dialog.notes_scroll - event.y * 35))
                 return
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.update_dialog.later()

@@ -149,6 +149,8 @@ class FeatureTests(unittest.TestCase):
                     (work / 'media.mp4').write_bytes(b'media fixture')
                 def urlopen(self, request):
                     calls.append(request.url)
+                    if not (root / 'Example title.mp4').is_file():
+                        raise AssertionError('Media must be committed before requesting its thumbnail')
                     if fail:
                         raise OSError('offline')
                     return Response(png_bytes())

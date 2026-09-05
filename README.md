@@ -41,14 +41,14 @@
 
 ## Quick start
 
-1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the application ZIP asset (for example, `1.0.2.zip` or `SimpleYTDownloader-v1.0.2.zip`).
+1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the application ZIP asset (for example, `1.0.3.zip` or `SimpleYTDownloader-v1.0.3.zip`).
 2. Extract **`SimpleYTDownloader.exe`** into a writable folder and launch it.
 3. Paste a video URL on **Download**, choose **MP4** or **MP3**, and select your quality and output folder.
 4. Click **Add to Queue**, open **Queue**, and click **Start queue**.
 
-> **Version 1.0.2 build:** [Builds/1.0.2.zip](Builds/1.0.2.zip) contains the application EXE. For users updating from 1.0.0 or the original 1.0.1 build, upload `dist/SimpleYTDownloader-v1.0.2.zip` to the GitHub Release. The [1.0.0](Builds/1.0.0.zip) and [1.0.1](Builds/1.0.1.zip) builds are retained.
+> **Version 1.0.3 build:** [Builds/1.0.3.zip](Builds/1.0.3.zip) contains the application EXE. Upload `dist/SimpleYTDownloader-v1.0.3.zip` to the GitHub Release to support every updater-enabled version, including 1.0.0 and 1.0.1. Older builds remain in [Builds](Builds).
 
-See [what changed in 1.0.2](docs/releases/1.0.2.md) for the release notes, or the [1.0.1 features](docs/releases/1.0.1.md).
+See [what changed in 1.0.3](docs/releases/1.0.3.md) for the release notes, or the [1.0.1 features](docs/releases/1.0.1.md) and [1.0.2 updater improvements](docs/releases/1.0.2.md).
 
 ### Media tools
 
@@ -70,6 +70,8 @@ Open **Settings → Appearance** to choose **Orange, Blue, Violet, Mint, Rose, o
 Turn **Settings → Save video thumbnails** on to save an image beside newly queued videos or audio files. The setting is off by default and is captured when each item is added, so retries keep that item's choice. Images use their original JPEG, PNG, or WebP format; they are separate files, not embedded album artwork.
 
 The image normally shares the saved media's filename stem. Existing images are preserved with a numbered suffix when needed. A missing, unsupported, oversized, or unreachable thumbnail produces a reportable warning while keeping the successfully downloaded media. Thumbnail transfers run inside the download worker, so queue cancellation and shutdown stop them as well. Each image is limited to 12 MiB, with up to three metadata-provided candidates attempted.
+
+Since **1.0.3**, the MP4/MP3 is saved to the output folder before thumbnail retrieval starts. Cancelling at that point keeps the media and marks the item completed with a warning about the unfinished thumbnail. A worker error after the media-save notification also preserves the completed result, and the queue can continue.
 
 ### Error reports
 
@@ -111,6 +113,7 @@ Private, removed, restricted, throttled, or verification-required videos produce
 - Downloads use their own `.ytd-...` temporary directory within the output folder. It is cleaned after success, failure, or cancellation; only completed media is published to the final filename.
 - Preferences use the existing compatibility path `%APPDATA%\YouTube Downloader\settings.json`. `YTD_CONFIG_DIR` can change the base configuration folder for portable use or tests. No registry entries are used.
 - **Remember settings: OFF** removes saved preferences and keeps subsequent changes in memory only.
+- Preference saves use separate temporary files for each writer and atomic replacement. Two app instances can save without sharing an incomplete JSON file; the last successful save wins. Unreadable, oversized, or excessively nested settings fall back to defaults with a reportable message.
 - Browse selections on Download save immediately. In Settings, **Save preferences** applies edited folder/tool paths. Format, quality, and toggle changes save automatically; download defaults apply on the next launch.
 
 | Shortcut | Action |
@@ -145,6 +148,8 @@ Only published stable releases qualify. Commits, tags without a published releas
 
 Starting with **1.0.2**, the checker reads the release's actual attached assets and accepts a single ZIP regardless of its filename, including `1.0.3.zip`. If several ZIPs are attached, it prefers the unique `SimpleYTDownloader-vX.Y.Z.zip`; otherwise it reports the ambiguity. The release description is shown as notes, including when an asset check fails. Links in descriptions are never used as executable download sources. A manual asset error opens a reportable popup; closing it reveals the release details and the reason installation is unavailable.
 
+In **1.0.3**, note scrolling follows the actual description height. Only visible lines are rendered, and long titles/URLs are truncated with bounded font measurements. GitHub responses are read in available chunks so cancellation is checked between reads. Release checks have a 30-second deadline, in addition to the 10-second socket timeout; an in-progress socket operation may take up to that timeout to return.
+
 <details>
 <summary><strong>Verification, installation, and rollback</strong></summary>
 
@@ -165,6 +170,8 @@ No separately distributed helper, Python installation, or development tool is re
 The updater needs write permission beside the installed EXE and does not request elevation. Another running copy, antivirus locks, or a disk failure can prevent replacement or recovery. If Windows blocks rollback, the original backup is kept and its path is reported for manual recovery.
 
 Abrupt power loss is not automatically recovered on the next launch. A preserved `.backup-<token>` can be restored manually while all app instances are closed. Cleanup retries temporary locks, but files can remain if the new app closes immediately or the OS keeps them locked. Startup acknowledgement checks the first frame and version, not every subsequent application operation.
+
+The 1.0.3 helper treats acknowledged startup as the installation's completion point. A later status-file or cleanup failure does not initiate rollback of the running replacement. If terminal status cannot be recorded, recovery and temporary files may be retained. Older EXEs still use their bundled helper when upgrading to 1.0.3; this helper fix applies to updates initiated from 1.0.3 onward.
 
 HTTPS and the API-provided SHA-256 digest protect provenance and transfer integrity within the trusted repository. They are not independent publisher code signing; repository/release access remains the publisher's trust boundary.
 
@@ -214,7 +221,7 @@ If YouTube changes cause extraction errors, update yt-dlp in the project environ
 The application version has one source of truth: **[app_version.py](app_version.py)**.
 
 ```python
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 ```
 
 For the next release, set a strictly higher stable semantic version, then follow these steps:
@@ -236,14 +243,15 @@ For the next release, set a strictly higher stable semantic version, then follow
 | `1.0.0` | `v1.0.0` | `SimpleYTDownloader-v1.0.0.zip` |
 | `1.0.1` | `v1.0.1` | `SimpleYTDownloader-v1.0.1.zip` |
 | `1.0.2` | `v1.0.2` | `SimpleYTDownloader-v1.0.2.zip` |
+| `1.0.3` | `v1.0.3` | `SimpleYTDownloader-v1.0.3.zip` |
 | `1.1.0` | `v1.1.0` | `SimpleYTDownloader-v1.1.0.zip` |
 
-**Compatibility with installed 1.0.0 / original 1.0.1:** those EXEs still require the standard filename above. Publish the 1.0.2 bridge release with `SimpleYTDownloader-v1.0.2.zip` so they can receive this fix, or let users manually extract `Builds/1.0.2.zip`. Changing source code or release descriptions cannot change the updater inside an already installed EXE. Once users run 1.0.2, a future release with just `1.0.3.zip` works too. Keeping the standard name on future releases also supports users who skip versions.
+**Compatibility with installed 1.0.0 / original 1.0.1:** those EXEs still require the standard filename above. Publish 1.0.3 with `SimpleYTDownloader-v1.0.3.zip` so they can update directly, or let users manually extract `Builds/1.0.3.zip`. Changing source code or release descriptions cannot change the updater inside an already installed EXE. Users running 1.0.2 or newer accept short ZIP filenames too. Keeping the standard name supports users who skip versions.
 
 The ZIP must contain **exactly one file at its root**:
 
 ```text
-SimpleYTDownloader-v1.0.2.zip
+SimpleYTDownloader-v1.0.3.zip
 └── SimpleYTDownloader.exe
 ```
 

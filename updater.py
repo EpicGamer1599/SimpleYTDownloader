@@ -375,11 +375,13 @@ def replace_and_launch(plan: UpdatePlan, launch=launch_and_confirm) -> str:
         backed_up = True
         replace_with_retry(plan.incoming, target)
         launch(plan, False)
+        # Startup acknowledgement commits the installation. Bookkeeping must
+        # never trigger rollback after the replacement is already running.
         try:
+            status(plan, "success", "The new version started successfully.")
             plan.backup.unlink()
-        except OSError:
-            pass  # The restarted app retries cleanup after the helper exits.
-        status(plan, "success", "The new version started successfully.")
+        except (OSError, UpdateError):
+            pass  # Preserve recovery files if status cannot be recorded.
         return "success"
     except Exception as error:
         if backed_up:
@@ -396,11 +398,14 @@ def replace_and_launch(plan: UpdatePlan, launch=launch_and_confirm) -> str:
         if target.is_file() and file_hash(target) == plan.original_sha256:
             try:
                 launch(plan, True)
-                status(plan, "rolled_back", "The update failed; the previous version was restored. " + str(error)[:300])
-                return "rolled_back"
             except Exception as launch_error:
                 status(plan, "failed", "The previous version is preserved but could not be restarted. " + str(launch_error)[:300])
                 raise UpdateError("The update failed. The previous executable is preserved; open it manually.") from launch_error
+            try:
+                status(plan, "rolled_back", "The update failed; the previous version was restored. " + str(error)[:300])
+            except (OSError, UpdateError):
+                pass
+            return "rolled_back"
         status(plan, "failed", str(error))
         raise
     finally:

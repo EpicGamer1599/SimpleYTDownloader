@@ -83,10 +83,11 @@ class PackagedUpdaterTests(unittest.TestCase):
         self.install.mkdir()
         self.target = self.install / EXE_NAME
         self.previous_version = APP_VERSION
-        if self._testMethodName == "test_upgrade_from_1_0_0":
-            with zipfile.ZipFile(BASE / "Builds" / "1.0.0.zip") as archive:
+        prior_builds = {"test_upgrade_from_1_0_0": "1.0.0", "test_upgrade_from_1_0_2": "1.0.2"}
+        if self._testMethodName in prior_builds:
+            self.previous_version = prior_builds[self._testMethodName]
+            with zipfile.ZipFile(BASE / "Builds" / (self.previous_version + ".zip")) as archive:
                 self.target.write_bytes(archive.read(EXE_NAME))
-            self.previous_version = "1.0.0"
         else:
             shutil.copyfile(BASE / "dist" / EXE_NAME, self.target)
         self.original_hash = file_hash(self.target)
@@ -194,6 +195,12 @@ class PackagedUpdaterTests(unittest.TestCase):
     def test_upgrade_from_1_0_0(self):
         self.transaction()
         self.record["previous_version"] = "1.0.0"
+        self.record["new_version"] = APP_VERSION
+
+    @unittest.skipUnless((BASE / "Builds" / "1.0.2.zip").is_file(), "Previous release ZIP required")
+    def test_upgrade_from_1_0_2(self):
+        self.transaction()
+        self.record["previous_version"] = "1.0.2"
         self.record["new_version"] = APP_VERSION
 
     def test_failed_new_version_startup_restores_and_restarts_old(self):

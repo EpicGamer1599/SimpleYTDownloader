@@ -10,6 +10,7 @@ class UpdateDialog:
         self.app = app
         self.visible = False
         self.notes_scroll = 0
+        self.notes_max_scroll = 0
 
     def show(self):
         self.visible = True
@@ -52,7 +53,9 @@ class UpdateDialog:
         previous = app.surface.get_clip()
         app.surface.set_clip(notes_box.inflate(-20, -12))
         notes = (release.notes or "The publisher did not provide release notes.") if release else "Release details are unavailable."
-        p.wrap(notes, (x + 12, notes_box.y + 10 - self.notes_scroll), inner - 24, 13, MUTED, 20, 120)
+        notes_height = p.wrap(notes, (x + 12, notes_box.y + 10 - self.notes_scroll), inner - 24, 13, MUTED, 20, 12000)
+        self.notes_max_scroll = max(0, notes_height - (notes_box.h - 20))
+        self.notes_scroll = min(self.notes_scroll, self.notes_max_scroll)
         app.surface.set_clip(previous)
         busy = snapshot.state in ("downloading", "extracting", "preparing", "installing", "restarting", "cancelling")
         blocked = any(i.state in ("Waiting", "Downloading") for i in app.manager.snapshot())

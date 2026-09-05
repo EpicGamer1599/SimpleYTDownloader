@@ -77,6 +77,30 @@ class QueueTests(unittest.TestCase):
         self.add()
         self.wait_for(lambda items: items[0].state == "Completed")
 
+    def test_cancel_during_thumbnail_keeps_saved_media_and_cleans_staging(self):
+        item = self.manager.add("https://youtu.be/THUMB000001", "MP4", "720p", self.temp.name, True)
+        self.manager.start()
+        self.wait_for(lambda items: items[0].media_saved)
+        self.manager.cancel(item.id)
+        items = self.wait_for(lambda items: self.manager.active_id is None)
+        self.assertEqual(items[0].state, "Completed")
+        self.assertEqual(Path(items[0].filename).read_bytes(), b"completed media")
+        self.assertEqual(items[0].warning_code, "SYTD-THUMBNAIL")
+        self.assertFalse(list(Path(self.temp.name).glob(".ytd-*")))
+
+    def test_worker_crash_or_error_after_save_keeps_media_and_continues_queue(self):
+        for video_id in ("CRASH000001", "SAVEERROR01"):
+            self.manager.add("https://youtu.be/" + video_id, "MP4", "720p", self.temp.name, True)
+        self.add()
+        self.manager.start()
+        items = self.wait_for(lambda items: items[-1].state == "Completed" and self.manager.active_id is None)
+        for item in items[:2]:
+            self.assertEqual(item.state, "Completed")
+            self.assertFalse(item.error)
+            self.assertEqual(item.warning_code, "SYTD-THUMBNAIL")
+            self.assertEqual(Path(item.filename).read_bytes(), b"completed media")
+        self.assertFalse(list(Path(self.temp.name).glob(".ytd-*")))
+
     @unittest.skipUnless(os.name == "nt", "Windows Job Object test")
     def test_shutdown_terminates_child_process(self):
         self.add("CHILD000001")
