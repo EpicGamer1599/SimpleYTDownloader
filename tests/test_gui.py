@@ -3,10 +3,12 @@ import ctypes
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from ctypes import wintypes
 from pathlib import Path
+from unittest.mock import PropertyMock, patch
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
@@ -15,6 +17,9 @@ from config.settings import SettingsManager
 from downloader.manager import DownloadManager
 from ui.app import App
 from ui.native import clipboard_get, clipboard_set
+from update_checker import UpdateCancelled
+from update_service import UpdateService
+from tests.test_updates import parse_release, release_data
 
 ARTIFACTS = Path(__file__).resolve().parents[1] / "test-artifacts"
 
@@ -25,6 +30,7 @@ class GuiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=ARTIFACTS)
         settings = SettingsManager(Path(self.temp.name) / "config")
         settings.settings.output_dir = self.temp.name
+        settings.settings.auto_check_updates = False
         manager = DownloadManager(worker_command=[sys.executable, "-u", "-m", "tests.fake_worker"])
         self.app = App(settings, manager)
 
@@ -40,6 +46,82 @@ class GuiTests(unittest.TestCase):
 
     def key(self, key, mod=0):
         self.app.step([pygame.event.Event(pygame.KEYDOWN, key=key, mod=mod)])
+
+    def test_manual_update_dialog_background_check_and_preferences(self):
+        entered, release_check = threading.Event(), threading.Event()
+        class Client:
+            def latest(self, cancel, version):
+                entered.set()
+                release_check.wait(3)
+                return parse_release(release_data())
+        self.app.updates.shutdown()
+        self.app.updates = UpdateService(Client())
+        self.addCleanup(release_check.set)
+        self.click("nav:Settings")
+        self.click("check_updates")
+        self.assertTrue(entered.wait(1))
+        self.click("nav:Download")
+        started = time.monotonic()
+        for _ in range(15):
+            self.app.step([])
+        self.assertLess(time.monotonic() - started, 1)
+        self.assertFalse(self.app.update_dialog.visible)
+        release_check.set()
+        self.app.updates._thread.join(2)
+        self.app.step([])
+        self.assertTrue(self.app.update_dialog.visible)
+        self.assertEqual(self.app.updates.snapshot().release.version, "1.1.0")
+        self.assertTrue(all(h.key.startswith("update:") for h in self.app.hits))
+        self.assertFalse(any(h.key == "update:now" for h in self.app.hits))  # source checkout
+        with patch.object(UpdateService, "install_supported", new_callable=PropertyMock, return_value=True):
+            self.app.draw()
+            pygame.image.save(self.app.surface, ARTIFACTS / "update-available.png")
+            self.assertTrue(any(h.key == "update:now" for h in self.app.hits))
+            self.app.manager.add("https://youtu.be/jNQXAC9IVRw", "MP4", "720p", self.temp.name)
+            self.app.draw()
+            self.assertFalse(any(h.key == "update:now" for h in self.app.hits))
+        self.key(pygame.K_ESCAPE)
+        self.assertFalse(self.app.update_dialog.visible)
+        self.app.updates.client.latest = lambda *args: None
+        self.click("nav:Settings")
+        self.click("toggle:auto_check_updates")
+        self.assertTrue(SettingsManager(Path(self.temp.name) / "config").settings.auto_check_updates)
+        self.app.updates._thread.join(2)
+        self.click("toggle:auto_check_updates")
+        self.assertFalse(SettingsManager(Path(self.temp.name) / "config").settings.auto_check_updates)
+        pygame.image.save(self.app.surface, ARTIFACTS / "update-settings.png")
+
+    def test_update_download_progress_and_cancel_leave_gui_usable(self):
+        entered = threading.Event()
+        class Client:
+            def download(self, release, target, cancel, progress):
+                progress(release.size // 2, release.size)
+                entered.set()
+                cancel.wait(3)
+                raise UpdateCancelled("cancelled")
+        self.app.updates.shutdown()
+        self.app.updates = UpdateService(Client())
+        self.app.updates._set(state="available", release=parse_release(release_data()))
+        self.app.update_dialog.show()
+        with patch.object(UpdateService, "install_supported", new_callable=PropertyMock, return_value=True):
+            self.click("update:now")
+            self.assertTrue(entered.wait(1))
+            stage = self.app.updates._stage
+            started = time.monotonic()
+            for _ in range(15):
+                self.app.step([])
+            self.assertLess(time.monotonic() - started, 1)
+            self.assertGreater(self.app.updates.snapshot().received, 0)
+            pygame.image.save(self.app.surface, ARTIFACTS / "update-progress.png")
+            self.click("update:later")
+            self.app.updates._thread.join(2)
+        self.app.step([])
+        self.assertEqual(self.app.updates.snapshot().state, "cancelled")
+        self.assertFalse(stage.exists())
+        self.click("update:later")
+        self.click("nav:Queue")
+        self.assertTrue(self.app.running)
+        self.assertEqual(self.app.page, "Queue")
 
     def test_url_format_quality_multiple_items_and_keyboard(self):
         self.click("url")

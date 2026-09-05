@@ -12,6 +12,7 @@ class ProcessTree:
     def __init__(self, process: subprocess.Popen):
         self.process = process
         self.handle = None
+        self.detached = False
         if os.name == "nt":
             self._attach_windows_job()
 
@@ -44,10 +45,13 @@ class ProcessTree:
         if handle and kernel.SetInformationJobObject(handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)) and kernel.AssignProcessToJobObject(handle, int(self.process._handle)):
             self.handle = handle
             self.kernel = kernel
+            self._limits_type = ExtendedLimits
         elif handle:
             kernel.CloseHandle(handle)
 
     def close(self) -> None:
+        if self.detached:
+            return
         if self.handle:
             self.kernel.CloseHandle(self.handle)
             self.handle = None
@@ -63,3 +67,13 @@ class ProcessTree:
                     os.killpg(self.process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+
+    def release(self) -> None:
+        """Allow an acknowledged replacement app/helper to outlive this process."""
+        if self.handle:
+            limits = self._limits_type()
+            if not self.kernel.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+                raise OSError("Could not release the updater process from its temporary job.")
+            self.kernel.CloseHandle(self.handle)
+            self.handle = None
+        self.detached = True

@@ -8,7 +8,6 @@ from pathlib import Path
 
 VIDEO_QUALITIES = ("Best available", "2160p", "1440p", "1080p", "720p", "480p", "360p")
 AUDIO_QUALITIES = ("Best available", "320 kbps", "256 kbps", "192 kbps", "128 kbps")
-VERSION = "1.0.0"
 
 
 @dataclass
@@ -20,6 +19,7 @@ class Settings:
     auto_start: bool = False
     remember: bool = True
     ffmpeg_location: str = ""
+    auto_check_updates: bool = True
 
 
 class SettingsManager:

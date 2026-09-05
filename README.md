@@ -1,40 +1,159 @@
-# YouTube Downloader
+<p align="center">
+  <img src="docs/readme-banner.svg" alt="SimpleYTDownloader — MP4 video, MP3 audio, one Windows desktop app" width="1100">
+</p>
 
-A working Windows desktop downloader built with Python, a custom Pygame interface, yt-dlp, and FFmpeg.
+<h1 align="center">SimpleYTDownloader</h1>
 
-![YouTube Downloader desktop interface](docs/screenshot.png)
+<p align="center">
+  <strong>Your next watch. Your favourite audio. Saved your way.</strong><br>
+  A Windows desktop app with a custom dark interface, a download queue, and built-in release updates.
+</p>
 
-## Launch on this computer
+<p align="center">
+  <a href="https://github.com/EpicGamer1599/SimpleYTDownloader/releases"><strong>Download for Windows</strong></a>
+  &nbsp; · &nbsp;
+  <a href="#quick-start">Quick start</a>
+  &nbsp; · &nbsp;
+  <a href="#application-updates">Updates</a>
+  &nbsp; · &nbsp;
+  <a href="#build-from-source">Build from source</a>
+  &nbsp; · &nbsp;
+  <a href="TESTING.md">Test results</a>
+</p>
 
-Double-click **Launch YouTube Downloader.bat**, or run this from the project folder:
+---
 
-```powershell
-.\.venv\Scripts\python.exe main.py
-```
+## Features
 
-The project environment has been installed and tested. The app detects the existing FFmpeg and Node.js installations on this computer. The Python entry point is **main.py**; the batch file is an optional convenience launcher.
+| | What you get |
+| :--- | :--- |
+| **MP4 video** | Choose a resolution or Best available, with a fallback to the quality the video actually offers. |
+| **MP3 audio** | Choose an encoding bitrate or Best available variable-bitrate audio. |
+| **A queue you control** | Add multiple videos, start or pause the queue, cancel items, retry failures, and follow progress. |
+| **A clean desktop interface** | A resizable dark Pygame UI with keyboard shortcuts, clipboard support, and a native Windows folder picker. |
+| **Readable filenames** | Keep original titles, handle Windows filename rules, and preserve existing files with numbered suffixes. |
+| **Remembered preferences** | Save your format, quality, folder, tool paths, and automatic-update preference. |
+| **Built-in updates** | Check published GitHub releases, review release notes, and install with progress, backup, and rollback support. |
+| **One application EXE** | Run `SimpleYTDownloader.exe` without installing Python, Git, PyInstaller, or development tools. |
 
-## Build a Windows executable
+## Quick start
 
-Install the build requirements in the project environment, activate it, and run:
+1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the `SimpleYTDownloader-vX.Y.Z.zip` asset.
+2. Extract **`SimpleYTDownloader.exe`** into a writable folder and launch it.
+3. Paste a video URL on **Download**, choose **MP4** or **MP3**, and select your quality and output folder.
+4. Click **Add to Queue**, open **Queue**, and click **Start queue**.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
-.\.venv\Scripts\Activate.ps1
-python -m PyInstaller --onefile --windowed --name SimpleYTDownloader main.py
-```
+> **Using version 1.0.0?** The repository also includes [Builds/1.0.0.zip](Builds/1.0.0.zip). It contains the application EXE. Published updater assets use the filename `SimpleYTDownloader-v1.0.0.zip`.
 
-The resulting app is **dist/SimpleYTDownloader.exe**. It includes Python, Pygame, yt-dlp, and the Python dependencies, and runs without a console window. FFmpeg/FFprobe and a supported JavaScript runtime are detected separately as described below. To distribute portable FFmpeg tools alongside the executable, use `dist/tools/ffmpeg/bin/`.
+### Media tools
 
-The executable includes dedicated worker and folder-picker entry points so these features continue to work without an installed Python interpreter. To verify the packaged media pipeline and folder picker after rebuilding:
+The EXE includes Python, Pygame, yt-dlp, and its Python dependencies. Media processing tools are detected separately:
 
-```powershell
-.\.venv\Scripts\python.exe -m tests.executable_smoke
-```
+| Tool | When it is needed | Setup |
+| :--- | :--- | :--- |
+| **FFmpeg + FFprobe** | MP3 conversion and merging separate video/audio streams. | Install [FFmpeg](https://ffmpeg.org/download.html#build-windows), then choose its `bin` folder in Settings or add it to PATH. |
+| **Deno or Node.js** | Full YouTube support through yt-dlp's JavaScript solver. | Install a supported [Deno](https://deno.com/) or [Node.js](https://nodejs.org/) version. See the [yt-dlp runtime instructions](https://github.com/yt-dlp/yt-dlp/wiki/EJS). |
 
-## Set up another Windows computer
+FFmpeg can also be placed in `tools/ffmpeg/bin/` beside the application, or located through `FFMPEG_LOCATION`. Common Windows WinGet and Kdenlive installations are detected. Without FFmpeg, the app can attempt combined MP4 formats, with potentially limited resolution. The included Python requirements provide yt-dlp's EJS package.
 
-Install Python 3.10 or newer from [python.org](https://www.python.org/downloads/windows/), then run:
+## Make it yours
+
+### Download and queue controls
+
+| Action | Behaviour |
+| :--- | :--- |
+| **Add to Queue** | Adds a video without starting an idle queue by default. Settings can enable automatic start. |
+| **Start / Resume queue** | Downloads queued items one at a time. |
+| **Pause queue** | Lets the current download and conversion finish, then holds the remaining items. An explicit pause also holds newly added items. |
+| **Cancel / Retry** | Stops an item, including its converter, or requeues a failed/cancelled item. |
+| **Remove / Clear completed** | Removes queue entries while keeping saved media. |
+| **Folder** | Opens an item's output folder. |
+
+Titles and available quality are fetched when an item starts. Waiting entries initially show their video identifier. The queue displays transfer progress, speed, ETA, conversion status, completion, and errors. Queue history lasts for the current session.
+
+<details>
+<summary><strong>Quality choices and supported links</strong></summary>
+
+The app accepts public individual video links, including YouTube watch URLs, short links, Shorts, embeds, and archived live-video links. A video URL containing playlist parameters downloads that video only. Playlist downloads, authentication/cookie management, and recording a broadcast while it is still live are outside the current scope.
+
+Resolution is a preference, not a guarantee. The downloader prefers available MP4 video and M4A/AAC audio at or below the selected resolution, with a fallback when necessary. **Best available** does not upscale video. Very high resolutions may use newer codecs, depending on the formats YouTube supplies. MP3 bitrate changes encoding; it does not improve the original source's fidelity.
+
+Private, removed, restricted, throttled, or verification-required videos produce an in-app error that can be copied.
+
+</details>
+
+<details>
+<summary><strong>Files, preferences, and keyboard shortcuts</strong></summary>
+
+- Original titles become readable filenames, preserving spaces and supported punctuation. Invalid Windows characters, reserved device names, trailing dots/spaces, empty titles, and long UTF-16 filenames are handled.
+- Existing files are preserved: repeated titles receive suffixes such as `My video (2).mp4`.
+- Downloads use their own `.ytd-...` temporary directory within the output folder. It is cleaned after success, failure, or cancellation; only completed media is published to the final filename.
+- Preferences use the existing compatibility path `%APPDATA%\YouTube Downloader\settings.json`. `YTD_CONFIG_DIR` can change the base configuration folder for portable use or tests. No registry entries are used.
+- **Remember settings: OFF** removes saved preferences and keeps subsequent changes in memory only.
+- Browse selections on Download save immediately. In Settings, **Save preferences** applies edited folder/tool paths. Format, quality, and toggle changes save automatically; download defaults apply on the next launch.
+
+| Shortcut | Action |
+| :--- | :--- |
+| `Ctrl+V` / `Ctrl+A` | Paste / select all in a text field. |
+| `Ctrl+C` / `Ctrl+X` | Copy / cut selected text. |
+| `Shift` + arrow keys | Extend a text selection. |
+| `Home` / `End` | Move to the start / end of a text field. |
+| `Tab` / `Shift+Tab` | Move between visible controls. |
+| `Enter` | Add a focused URL to the queue, or activate the focused button. |
+| `Space` | Activate a focused button. |
+| Mouse wheel / `Page Up` / `Page Down` | Scroll the queue or shorter-window pages; page keys apply outside text fields. |
+| `Escape` | Dismiss a message, clear focus, or choose Later in the update prompt. |
+
+</details>
+
+## Application updates
+
+SimpleYTDownloader checks for updates in the background after its first GUI frame. It checks only the latest published, stable release from **[EpicGamer1599/SimpleYTDownloader](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and compares its semantic version with `APP_VERSION`.
+
+| When… | The app… |
+| :--- | :--- |
+| A compatible newer release is available | Shows your current version, the new version, release name, and scrollable release notes. Choose **Update Now** or **Later**. |
+| You choose **Update Now** | Downloads, verifies, and extracts the update in the background, shows progress, then restarts to install it. |
+| You want to check manually | Open **Settings → Check for Updates**, even with automatic checks disabled. |
+| You prefer to check yourself | Turn **Check automatically at startup** off. Keep **Remember settings** on to retain the preference. |
+| You are offline, GitHub is unavailable, or no newer release exists | Continues normal startup. Failed automatic checks do not open an error popup. |
+
+Finish or cancel waiting/active queue items before installing an update. **Cancel** remains available during download, extraction, and preparation; the final handoff/restart cannot be cancelled. Network operations use a 10-second socket timeout, so cancellation of a stalled request can take a moment while the GUI continues rendering.
+
+Only published stable releases qualify. Commits, tags without a published release, drafts, prereleases, GitHub's generated source ZIPs, and equal/older versions do not trigger an installation. Source checkouts can check releases and display their details; automatic installation requires the packaged Windows EXE in a writable folder.
+
+<details>
+<summary><strong>Verification, installation, and rollback</strong></summary>
+
+1. **Verify the source.** The URL is reconstructed from the expected repository, release tag, and exact asset filename. Only HTTPS redirects to GitHub's release asset hosts are allowed.
+2. **Verify the download.** The byte count and GitHub-provided SHA-256 digest must match. ZIP checks reject traversal, extra files, links, encryption, invalid executables, and mismatched processor architectures. Limits are 256 MiB compressed, 512 MiB extracted, and a compression ratio of 250.
+3. **Prepare the helper.** Files are staged in `%TEMP%\SimpleYTDownloader-update-*`. A copy of the **current EXE** runs as `update-helper.exe` with its bundled Python environment. A Windows mutex prevents competing helpers for the same installation in the same session.
+4. **Wait and replace.** The helper verifies the original process and handoff token, waits for the app to exit, and copies the candidate onto the installation volume. The existing EXE becomes `SimpleYTDownloader.exe.backup-<token>` before replacement.
+5. **Confirm or recover.** The new app must render its first GUI frame and acknowledge the expected version. If replacement or startup fails, the helper moves any failed candidate to `.failed-<token>`, restores the backup, and launches the previous version.
+6. **Clean up.** After successful startup or rollback, the restarted app waits for the helper to exit and removes transaction files. Preferences and downloaded media keep their existing locations; in-memory queue history is not retained across the restart.
+
+No separately distributed helper, Python installation, or development tool is required. The build and test scripts do not publish releases.
+
+</details>
+
+<details>
+<summary><strong>Update limits and recovery notes</strong></summary>
+
+The updater needs write permission beside the installed EXE and does not request elevation. Another running copy, antivirus locks, or a disk failure can prevent replacement or recovery. If Windows blocks rollback, the original backup is kept and its path is reported for manual recovery.
+
+Abrupt power loss is not automatically recovered on the next launch. A preserved `.backup-<token>` can be restored manually while all app instances are closed. Cleanup retries temporary locks, but files can remain if the new app closes immediately or the OS keeps them locked. Startup acknowledgement checks the first frame and version, not every subsequent application operation.
+
+HTTPS and the API-provided SHA-256 digest protect provenance and transfer integrity within the trusted repository. They are not independent publisher code signing; repository/release access remains the publisher's trust boundary.
+
+Previously distributed builds without an updater require one manual installation of an updater-enabled build. Future releases must retain this project's helper/startup protocol for acknowledgement and rollback.
+
+Implementation references: [GitHub Releases API](https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#get-the-latest-release) · [PyInstaller subprocess environment guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#using-sys-executable-to-spawn-subprocesses-that-outlive-the-application-process-implementing-application-restart).
+
+</details>
+
+## Build from source
+
+For development, install **Python 3.10 or newer**, open a terminal in the project folder, and run:
 
 ```powershell
 py -3 -m venv .venv
@@ -42,84 +161,138 @@ py -3 -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-Install [FFmpeg and FFprobe](https://ffmpeg.org/download.html#build-windows). You can put their `bin` folder on PATH, put the binaries in `tools/ffmpeg/bin/`, set `FFMPEG_LOCATION`, or select the bin folder in Settings. Common Windows WinGet and Kdenlive installations are also detected. FFmpeg is required for MP3 conversion and separate video/audio streams. Without it, the app can attempt combined MP4 formats, which may have limited resolution.
+If the project environment already exists, launch directly with the final command. The main entry point is **`main.py`**. The existing [Launch YouTube Downloader.bat](Launch%20YouTube%20Downloader.bat) is an optional convenience launcher for SimpleYTDownloader.
 
-For full YouTube support, install a supported JavaScript runtime such as [Deno](https://deno.com/) or [Node.js](https://nodejs.org/). The app detects either one, including common Windows install locations. The Python requirements include yt-dlp's EJS package. See [yt-dlp's JavaScript runtime instructions](https://github.com/yt-dlp/yt-dlp/wiki/EJS) for the supported runtime versions.
+### Build the one-file Windows EXE
 
-If YouTube changes cause extraction errors, update the downloader in the project environment:
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv\Scripts\Activate.ps1
+python -m PyInstaller --onefile --windowed --name SimpleYTDownloader main.py
+```
+
+**Output:** `dist/SimpleYTDownloader.exe`
+
+The build includes the GUI, yt-dlp, Python dependencies, download worker, native folder picker, and updater through normal imports. No additional hidden imports or separately distributed updater are required. The EXE opens without a console. FFmpeg/FFprobe and a JavaScript runtime remain separate media tools; portable FFmpeg can be placed under `dist/tools/ffmpeg/bin/`.
+
+<details>
+<summary><strong>Refresh yt-dlp in a source environment</strong></summary>
+
+If YouTube changes cause extraction errors, update yt-dlp in the project environment, test, and rebuild for EXE distribution:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install --upgrade "yt-dlp[default]"
 ```
 
-## Use the app
+</details>
 
-1. Paste a YouTube video URL on **Download**. Watch, short-link, Shorts, embed, and archived live-video links are accepted. A video URL with playlist parameters downloads that video only.
-2. Select **MP4** and a resolution, or **MP3** and an encoding bitrate.
-3. Choose an output folder and click **Add to Queue**. Enter also adds the link while the URL field is focused.
-4. Open **Queue** and click **Start queue**.
+## Publish a release
 
-The queue downloads one item at a time. Titles and available quality are fetched when an item starts. Waiting items show their video identifier until their title is known. Progress, stream transfer speed, ETA, conversion status, errors, and completion appear in the queue.
+The application version has one source of truth: **[app_version.py](app_version.py)**.
 
-**Pause queue** allows the current download and conversion to finish, then holds the remaining items. **Resume queue** continues. **Cancel** stops an active download, including its converter; **Retry** requeues failed or cancelled items. **Remove** and **Clear completed** remove queue entries without deleting saved media. **Folder** opens an item's output folder.
+```python
+APP_VERSION = "1.0.0"
+```
 
-By default, adding a link never starts an idle queue. Settings can enable automatic start. An explicit pause holds new items too, until you resume. Queue history lasts for the current session.
+For the next release, set a strictly higher stable semantic version, then follow these steps:
 
-Resolution choices are preferences, not guarantees. The downloader prefers an available MP4 video and M4A/AAC audio at or below the selected resolution, with a fallback when needed. The queue shows the selected video's actual resolution. Selecting Best available does not upscale. Very high resolutions may use newer video codecs depending on YouTube's available formats. MP3 bitrate controls encoding; it does not improve the original source's fidelity. Best available MP3 uses FFmpeg's best variable-bitrate setting.
+1. **Build on Windows.** Use the command above, keep the name `SimpleYTDownloader.exe`, and match the processor architecture of the installed version.
+2. **Package the built EXE.** Run the following from the repository root:
 
-## Files and settings
+   ```powershell
+   .\.venv\Scripts\python.exe -m scripts.package_release
+   ```
 
-- Original titles become readable filenames, preserving spaces and supported punctuation.
-- Invalid Windows characters, device names, empty titles, trailing dots/spaces, and long UTF-16 filenames are handled.
-- Existing files are preserved. Repeated titles get suffixes such as `My video (2).mp4`.
-- Each download uses its own `.ytd-...` temporary directory within the output folder. It is cleaned after success, failure, or cancellation. Only completed media is published to the final filename.
-- Preferences are stored in `%APPDATA%\YouTube Downloader\settings.json`. No registry entries are used. `YTD_CONFIG_DIR` can change the base configuration folder for portable use or tests.
-- **Remember settings: OFF** deletes the app's saved preferences and keeps future changes in memory only.
-- Browse selections on Download are remembered immediately. On Settings, use **Save preferences** to apply edited folder/tool paths; format, quality, and toggle changes save automatically. Defaults apply to the Download page on the next launch.
+   The script checks the EXE's `--version` against `APP_VERSION` and verifies the ZIP. It refuses to overwrite an existing release ZIP; move or remove a previous generated archive before deliberately repackaging the same version.
 
-Text fields support Ctrl+V, Ctrl+A, Ctrl+C, Ctrl+X, selection with Shift+arrows, Home/End, and deletion. Tab/Shift+Tab move between visible controls; Enter/Space activate buttons. The mouse wheel scrolls the queue and short-window pages. Page Up/Down scroll when a text field is not focused. Escape dismisses messages and clears focus.
+3. **Create a GitHub Release.** Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases) → Draft a new release**, select/create the matching tag, add a name and release notes, and upload the ZIP. Publish it as the latest stable release with prerelease unchecked.
+4. **Check the metadata.** Verify the [latest-release API response](https://api.github.com/repos/EpicGamer1599/SimpleYTDownloader/releases/latest). The tag, asset name, repository URLs, size, and `digest` must match. GitHub supplies `digest` as `sha256:...` for newly uploaded assets. Assets without it are rejected; re-upload an older asset if necessary.
 
-The app supports public individual videos. Playlist downloads, authentication/cookie management, and recording a broadcast while it is still live are outside the current scope. Private, removed, restricted, throttled, and verification-required videos produce an in-app error that can be copied.
+| Application version | GitHub release tag | Required uploaded asset |
+| :--- | :--- | :--- |
+| `1.0.0` | `v1.0.0` | `SimpleYTDownloader-v1.0.0.zip` |
+| `1.1.0` | `v1.1.0` | `SimpleYTDownloader-v1.1.0.zip` |
 
-## Code layout
+The ZIP must contain **exactly one file at its root**:
 
 ```text
-main.py                   Python entry point and missing-dependency message
-config/settings.py        Validated JSON preferences
-downloader/models.py      Queue item data
-downloader/manager.py     Thread-safe sequential queue and worker supervision
-downloader/worker.py      yt-dlp extraction, downloading, FFmpeg postprocessing
-downloader/process.py     Windows Job Objects and child-process cleanup
-downloader/utils.py       URL/path validation and safe final filenames
-downloader/dependencies.py Tool detection
-ui/app.py                 Main loop, pages, layout, interactions
-ui/widgets.py             Custom drawing, icons, buttons, text inputs
-ui/native.py              Native Windows folder picker and clipboard
-tests/                    Unit, GUI, process-lifecycle, and real-media checks
+SimpleYTDownloader-v1.0.0.zip
+└── SimpleYTDownloader.exe
 ```
 
-Network work and conversion run in a separate Python process, supervised by a background thread. The GUI reads protected snapshots; workers never draw or modify Pygame objects. Windows Job Objects stop child processes during cancellation and shutdown. A folder picker runs separately so progress can continue updating while it is open.
+Do not include an enclosing folder, helper EXE, DLLs, media tools, or source files. A tag alone, GitHub's generated source archive, or a ZIP committed under `Builds/` will not trigger an update.
 
-## Verify
+## Verification
 
-The automated suite uses standard-library `unittest`. GUI checks open real windows and briefly test the clipboard and native folder dialog. Run it in a normal interactive Windows session:
+Run these in a normal interactive Windows session; GUI tests open real windows and exercise the clipboard and native folder dialog:
 
 ```powershell
+# Application, media, GUI, and updater tests
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+
+# After building: real EXE media worker and native folder picker
+.\.venv\Scripts\python.exe -m tests.executable_smoke
+
+# Real frozen helper: success, cancellation, and rollback on disposable copies
+.\.venv\Scripts\python.exe -m tests.updater_executable_smoke
 ```
 
-Media tests generate a short local fixture and serve it on loopback to exercise actual yt-dlp downloading, MP4 merging, and MP3 encoding. FFmpeg and FFprobe must be installed; these tests do not contact YouTube.
+Media tests use generated fixtures served over loopback and require FFmpeg/FFprobe. Updater tests use controlled API responses and archives; packaged updater tests replace only disposable EXE copies. These suites do not perform a production update or contact YouTube. The packaged updater report is saved to `test-artifacts/updater-executable-report.json`.
 
-A short launch test:
+<details>
+<summary><strong>Optional GUI screenshot and live YouTube test</strong></summary>
 
 ```powershell
+# Open the real GUI, capture it, and exit
 .\.venv\Scripts\python.exe main.py --smoke-test 3 --screenshot test-artifacts\download.png
-```
 
-An optional live test downloads the short public video *Me at the zoo* in both formats, measures GUI responsiveness, and saves the files and JSON report under `test-artifacts/youtube/`:
-
-```powershell
+# Download the short public video "Me at the zoo" in MP4 and MP3
 .\.venv\Scripts\python.exe -m tests.youtube_smoke
 ```
 
-See [TESTING.md](TESTING.md) for the results from this computer. Implementation follows the [yt-dlp Python integration and format selection documentation](https://github.com/yt-dlp/yt-dlp#embedding-yt-dlp).
+The live test measures GUI responsiveness and saves its media, screenshot, and JSON report under `test-artifacts/youtube/`.
+
+</details>
+
+See **[TESTING.md](TESTING.md)** for recorded results, environment details, and testing limitations.
+
+## Project map
+
+```text
+SimpleYTDownloader/
+├── main.py                    App entry point and bundled helper modes
+├── app_version.py             Single APP_VERSION constant
+├── update_checker.py          Published releases, SemVer, verified downloads
+├── update_service.py          Background checks, progress, cancellation
+├── updater.py                 Staging, Windows helper, backup, rollback
+├── runtime.py                 Source/frozen commands and windowed streams
+├── config/
+│   └── settings.py            Validated JSON preferences
+├── downloader/
+│   ├── models.py              Queue item data
+│   ├── manager.py             Sequential queue and worker supervision
+│   ├── worker.py              yt-dlp downloads and FFmpeg postprocessing
+│   ├── process.py             Windows Job Objects and process cleanup
+│   ├── utils.py               URL/path validation and safe filenames
+│   └── dependencies.py        Media tool detection
+├── ui/
+│   ├── app.py                 Pages, layout, input, and main loop
+│   ├── update_dialog.py       Release notes and update progress
+│   ├── widgets.py             Drawing, icons, controls, and text fields
+│   └── native.py              Windows folder picker and clipboard
+├── scripts/
+│   └── package_release.py     Version-checked release ZIP creation
+└── tests/                     Unit, GUI, media, and packaged EXE checks
+```
+
+Downloads and conversion run in a separate process supervised by a background thread. The GUI reads protected snapshots; workers never draw or modify Pygame objects. Update checks/downloads run in their own background thread, and the folder picker runs separately to keep progress responsive.
+
+---
+
+<p align="center">
+  <strong>SimpleYTDownloader</strong><br>
+  Built with <a href="https://www.pygame.org/">Pygame</a>, <a href="https://github.com/yt-dlp/yt-dlp#embedding-yt-dlp">yt-dlp</a>, and <a href="https://ffmpeg.org/">FFmpeg</a>.<br>
+  <a href="https://github.com/EpicGamer1599/SimpleYTDownloader/releases">Releases</a>
+  &nbsp; · &nbsp;
+  <a href="https://github.com/EpicGamer1599/SimpleYTDownloader/issues">Report an issue</a>
+</p>

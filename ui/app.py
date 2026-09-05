@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pygame
 
-from config.settings import AUDIO_QUALITIES, VIDEO_QUALITIES, VERSION, SettingsManager
+from app_version import APP_VERSION
+from config.settings import AUDIO_QUALITIES, VIDEO_QUALITIES, SettingsManager
 from downloader.dependencies import ROOT, dependency_status
 from downloader.manager import DownloadManager
 from downloader.process import ProcessTree
@@ -19,6 +20,8 @@ from downloader.utils import output_directory
 from ui.native import clipboard_get, clipboard_set, open_folder
 from ui.widgets import ACCENT, BG, BORDER, FAINT, FIELD, GREEN, MUTED, PANEL, RED, SIDEBAR, TEXT, Painter, TextInput, blend
 from runtime import helper_command
+from update_service import UpdateService
+from ui.update_dialog import UpdateDialog
 
 
 @dataclass
@@ -47,7 +50,7 @@ def eta_label(value):
 
 
 class App:
-    def __init__(self, settings_manager=None, manager=None, size=(1180, 820)):
+    def __init__(self, settings_manager=None, manager=None, size=(1180, 820), update_service=None, check_updates=True):
         if os.name == "nt":
             try:
                 import ctypes
@@ -69,6 +72,8 @@ class App:
         self.settings_manager = settings_manager or SettingsManager()
         self.settings = self.settings_manager.settings
         self.manager = manager or DownloadManager(self.settings.auto_start, self.settings.ffmpeg_location)
+        self.updates = update_service or UpdateService()
+        self.update_dialog = UpdateDialog(self)
         self.dependencies = dependency_status(self.settings.ffmpeg_location)
         self.page = "Download"
         self.format = self.settings.default_format
@@ -101,6 +106,8 @@ class App:
         if self.settings_manager.warning:
             self.notify(self.settings_manager.warning, error=True)
         self.draw()
+        if check_updates and self.settings.auto_check_updates:
+            self.updates.check()
 
     def notify(self, message, error=False):
         self.notice = (message, error, time.monotonic() + (3600 if error else 4))
@@ -192,7 +199,28 @@ class App:
         setattr(self.settings, key, value)
         if key == "auto_start":
             self.manager.auto_start = value
+        elif key == "auto_check_updates":
+            if value:
+                self.updates.check()
+            else:
+                self.updates.cancel_check()
         self.save_preferences()
+
+    def check_for_updates(self):
+        if not self.updates.check(manual=True):
+            self.notify("An update operation is already running.")
+
+    def poll_updates(self):
+        for event, manual in self.updates.events():
+            if self.closing:
+                continue
+            if event in ("available", "error", "cancelled"):
+                self.update_dialog.show()
+            elif event == "latest" and manual:
+                self.notify("No newer published release is available.")
+            elif event == "restart":
+                self.update_dialog.visible = False
+                self.begin_close()
 
     def save_settings(self):
         try:
@@ -318,7 +346,7 @@ class App:
             if self.focus == key:
                 pygame.draw.rect(self.surface, ACCENT, rect, 1, border_radius=10)
             self.register(key, rect, lambda value=name: self.navigate(value))
-        self.p.text("v" + VERSION, (24, height - 40), 11, FAINT)
+        self.p.text("v" + APP_VERSION, (24, height - 40), 11, FAINT)
         if width > 100:
             self.p.text("Made to keep.", (24, height - 65), 12, MUTED)
 
@@ -366,7 +394,7 @@ class App:
             pygame.draw.rect(self.surface, BORDER, (track.x, thumb_y, 4, thumb_height), border_radius=2)
         pygame.draw.line(self.surface, BORDER, (sidebar, h - 41), (w, h - 41))
         self.p.text("PYTHON + PYGAME", (x, h - 27), 10, FAINT, True)
-        footer = "One download at a time" if self.page == "Queue" else "Ctrl+V to paste  ·  Enter to add" if self.page == "Download" else "YouTube Downloader  /  " + VERSION
+        footer = "One download at a time" if self.page == "Queue" else "Ctrl+V to paste  ·  Enter to add" if self.page == "Download" else "YouTube Downloader  /  " + APP_VERSION
         fw = self.p.font(11).size(footer)[0]
         self.p.text(footer, (x + content_width - fw, h - 28), 11, MUTED)
         if self.fade > 0:
@@ -385,6 +413,8 @@ class App:
                 close = pygame.Rect(toast.right - 40, toast.y + 12, 28, 28)
                 self.p.icon("close", close.center, MUTED, 18)
                 self.register("dismiss", close, lambda: setattr(self, "notice", None))
+        if self.update_dialog.visible and not self.closing:
+            self.update_dialog.draw()
         if self.closing:
             veil = pygame.Surface((w, h), pygame.SRCALPHA)
             veil.fill((0, 0, 0, 190))
@@ -506,6 +536,19 @@ class App:
 
     def draw_settings(self, x, y, width):
         inner = width - 48
+        self.p.panel(pygame.Rect(x, y, width, 174))
+        self.p.text("APPLICATION UPDATES", (x + 24, y + 20), 10, MUTED, True)
+        self.p.text("Check automatically at startup", (x + 24, y + 48), 14, TEXT, True)
+        self.p.text("Published releases from EpicGamer1599/SimpleYTDownloader", (x + 24, y + 75), 11, FAINT, width=width - 130)
+        value = self.settings.auto_check_updates
+        self.button("toggle:auto_check_updates", "ON" if value else "OFF", (x + width - 93, y + 48, 69, 36),
+                    lambda v=value: self.setting("auto_check_updates", not v), selected=value)
+        snapshot = self.updates.snapshot()
+        self.p.text("Version " + APP_VERSION, (x + 24, y + 108), 12, MUTED)
+        self.p.text(snapshot.message, (x + 24, y + 134), 11, MUTED, width=width - 245)
+        self.button("check_updates", "Check for Updates", (x + width - 202, y + 110, 178, 40),
+                    self.check_for_updates, enabled=not self.updates.alive)
+        y += 190
         defaults_height = 89 + self.choices_height(VIDEO_QUALITIES, inner - 126) + 18 + self.choices_height(AUDIO_QUALITIES, inner - 126) + 26
         self.p.panel(pygame.Rect(x, y, width, defaults_height))
         self.p.text("DOWNLOAD DEFAULTS", (x + 24, y + 21), 10, MUTED, True)
@@ -556,7 +599,7 @@ class App:
         self.p.panel(pygame.Rect(x + 32, y + 32, 65, 65), (48, 35, 31), None, 19)
         self.p.icon("download", (x + 64, y + 64), ACCENT, 34)
         self.p.text("YouTube Downloader", (x + 32, y + 126), 28, TEXT, True)
-        self.p.text("Version " + VERSION, (x + 33, y + 174), 13, ACCENT)
+        self.p.text("Version " + APP_VERSION, (x + 33, y + 174), 13, ACCENT)
         self.p.wrap("A clean Python + Pygame downloader using yt-dlp. Save videos or audio with a considered interface and a queue that stays out of your way.", (x + 32, y + 219), width - 64, 16, MUTED)
         pygame.draw.line(self.surface, BORDER, (x + 32, y + 308), (x + width - 32, y + 308))
         self.p.text("PYTHON", (x + 32, y + 337), 11, MUTED, True)
@@ -571,6 +614,7 @@ class App:
         if self.closing:
             return
         self.closing = True
+        self.updates.shutdown(wait=False)
         self.manager.shutdown(wait=False)
         if self.picker:
             if self.picker_tree:
@@ -590,6 +634,17 @@ class App:
             return
         if self.closing:
             return
+        if self.update_dialog.visible:
+            if event.type == pygame.MOUSEWHEEL:
+                self.update_dialog.notes_scroll = max(0, min(2200, self.update_dialog.notes_scroll - event.y * 35))
+                return
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.update_dialog.later()
+                return
+            if event.type == pygame.TEXTINPUT:
+                return
+            if event.type == pygame.KEYDOWN and event.key not in (pygame.K_TAB, pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                return
         if event.type == pygame.MOUSEMOTION:
             self.mouse = event.pos
         elif event.type == pygame.MOUSEWHEEL:
@@ -640,7 +695,8 @@ class App:
         for event in pygame.event.get() if events is None else events:
             self.handle_event(event)
         self.poll_picker()
-        if self.closing and not self.manager.alive and self.picker is None:
+        self.poll_updates()
+        if self.closing and not self.manager.alive and self.picker is None and not self.updates.alive:
             self.running = False
         self.draw()
         if pygame.display.get_driver() != "dummy":
@@ -666,6 +722,7 @@ class App:
             self.close()
 
     def close(self):
+        self.updates.shutdown()
         self.manager.shutdown()
         if self.picker:
             if self.picker_tree:

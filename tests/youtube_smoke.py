@@ -17,6 +17,7 @@ def main():
     root.mkdir(parents=True, exist_ok=True)
     config = SettingsManager(root / "config")
     config.settings.output_dir = str(root)
+    config.settings.auto_check_updates = False
     app = App(config)
     app.manager.add("https://www.youtube.com/watch?v=jNQXAC9IVRw", "MP4", "360p", str(root))
     app.manager.add("https://www.youtube.com/watch?v=jNQXAC9IVRw", "MP3", "192 kbps", str(root))
