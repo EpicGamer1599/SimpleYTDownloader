@@ -6,7 +6,6 @@ import os
 import queue
 import shutil
 import subprocess
-import sys
 import tempfile
 import threading
 from dataclasses import asdict, replace
@@ -17,6 +16,7 @@ from downloader.dependencies import ROOT
 from downloader.models import DownloadItem, TERMINAL_STATES
 from downloader.process import ProcessTree
 from downloader.utils import friendly_error, normalize_youtube_url, output_directory
+from runtime import helper_command
 
 
 class DownloadManager:
@@ -30,10 +30,7 @@ class DownloadManager:
         self._condition = threading.Condition(threading.RLock())
         self._stop = threading.Event()
         self._cancel = threading.Event()
-        executable = Path(sys.executable)
-        if executable.name.lower() == "pythonw.exe":
-            executable = executable.with_name("python.exe")
-        self._command = worker_command or [str(executable), "-u", "-m", "downloader.worker"]
+        self._command = worker_command or helper_command("download-worker")
         self._thread = threading.Thread(target=self._dispatch, name="download-queue", daemon=True)
         self._thread.start()
 

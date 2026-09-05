@@ -2,6 +2,20 @@
 
 Tested on Windows on 2026-09-05.
 
+## Windows executable build
+
+Built `dist/SimpleYTDownloader.exe` using PyInstaller 6.22.2 with the requested command in the project's virtual environment:
+
+```powershell
+python -m PyInstaller --onefile --windowed --name SimpleYTDownloader main.py
+```
+
+The one-file executable is 27,185,465 bytes. Its real GUI opened, saved `test-artifacts/executable.png`, and closed successfully with exit code 0. The download worker also returned a readable missing-FFmpeg error through its redirected pipes in windowed mode.
+
+After the packaging changes, all **24 existing tests passed in 13.150 seconds**. In addition, `python -m tests.executable_smoke` passed **four executable-specific checks in 16.012 seconds**: actual MP4 downloading, 320 kbps MP3 conversion, separate-stream MP4 merging, and native Windows folder selection. The media checks invoke the built EXE's worker and verify output with FFprobe.
+
+Python, Pygame, yt-dlp, its JavaScript solver assets, and Python dependencies are included. FFmpeg/FFprobe and a JavaScript runtime remain external tools. Build warnings concerned optional platform/dependency modules and the unused Tk fallback; the native Windows picker was verified successfully.
+
 ## Environment
 
 | Component | Version |

@@ -18,6 +18,7 @@ from downloader.process import ProcessTree
 from downloader.utils import output_directory
 from ui.native import clipboard_get, clipboard_set, open_folder
 from ui.widgets import ACCENT, BG, BORDER, FAINT, FIELD, GREEN, MUTED, PANEL, RED, SIDEBAR, TEXT, Painter, TextInput, blend
+from runtime import helper_command
 
 
 @dataclass
@@ -157,13 +158,10 @@ class App:
     def browse(self, target):
         if self.picker:
             return
-        executable = Path(sys.executable)
-        if executable.name.lower() == "pythonw.exe":
-            executable = executable.with_name("python.exe")
         try:
             owner = pygame.display.get_wm_info().get("window", 0)
-            self.picker = subprocess.Popen([str(executable), "-m", "ui.native", self.inputs[target].text, str(owner)], cwd=ROOT,
-                                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
+            self.picker = subprocess.Popen([*helper_command("folder-picker"), self.inputs[target].text, str(owner)], cwd=ROOT,
+                                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8",
                                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             self.picker_tree = ProcessTree(self.picker)
             self.picker_target = target

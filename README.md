@@ -14,6 +14,24 @@ Double-click **Launch YouTube Downloader.bat**, or run this from the project fol
 
 The project environment has been installed and tested. The app detects the existing FFmpeg and Node.js installations on this computer. The Python entry point is **main.py**; the batch file is an optional convenience launcher.
 
+## Build a Windows executable
+
+Install the build requirements in the project environment, activate it, and run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv\Scripts\Activate.ps1
+python -m PyInstaller --onefile --windowed --name SimpleYTDownloader main.py
+```
+
+The resulting app is **dist/SimpleYTDownloader.exe**. It includes Python, Pygame, yt-dlp, and the Python dependencies, and runs without a console window. FFmpeg/FFprobe and a supported JavaScript runtime are detected separately as described below. To distribute portable FFmpeg tools alongside the executable, use `dist/tools/ffmpeg/bin/`.
+
+The executable includes dedicated worker and folder-picker entry points so these features continue to work without an installed Python interpreter. To verify the packaged media pipeline and folder picker after rebuilding:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.executable_smoke
+```
+
 ## Set up another Windows computer
 
 Install Python 3.10 or newer from [python.org](https://www.python.org/downloads/windows/), then run:

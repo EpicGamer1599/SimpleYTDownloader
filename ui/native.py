@@ -158,8 +158,15 @@ def folder_picker(initial: str, owner: int = 0) -> str:
         root.destroy()
 
 
-if __name__ == "__main__":
+def main(arguments=None) -> int:
+    arguments = sys.argv[1:] if arguments is None else arguments
     try:
-        print(json.dumps({"path": folder_picker(sys.argv[1] if len(sys.argv) > 1 else "", int(sys.argv[2]) if len(sys.argv) > 2 else 0)}))
+        print(json.dumps({"path": folder_picker(arguments[0] if arguments else "", int(arguments[1]) if len(arguments) > 1 else 0)}))
+        return 0
     except Exception:
         print(json.dumps({"error": "The folder picker could not open. You can type a full folder path instead."}))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
