@@ -13,6 +13,7 @@ class UpdateDialog:
         self.notes_max_scroll = 0
 
     def show(self):
+        self.app.hits = []
         self.visible = True
         self.notes_scroll = 0
         self.app.focus = "update:later"
@@ -25,6 +26,7 @@ class UpdateDialog:
         elif state not in ("installing", "restarting"):
             self.visible = False
             self.app.focus = None
+            self.app.hits = []
 
     def start(self):
         if any(item.state in ("Waiting", "Downloading") for item in self.app.manager.snapshot()):

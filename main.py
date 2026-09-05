@@ -12,6 +12,9 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 def main() -> int:
     from runtime import prepare_standard_streams
     prepare_standard_streams()
+    if sys.argv[1:] == ["--sound-smoke-test"]:
+        from ui.sounds import smoke_test
+        return smoke_test()
     if sys.argv[1:2] == ["--download-worker"]:
         from downloader.worker import main as worker_main
         return worker_main()

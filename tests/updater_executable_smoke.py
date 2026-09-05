@@ -83,7 +83,7 @@ class PackagedUpdaterTests(unittest.TestCase):
         self.install.mkdir()
         self.target = self.install / EXE_NAME
         self.previous_version = APP_VERSION
-        prior_builds = {"test_upgrade_from_1_0_0": "1.0.0", "test_upgrade_from_1_0_2": "1.0.2"}
+        prior_builds = {"test_upgrade_from_1_0_0": "1.0.0", "test_upgrade_from_1_0_2": "1.0.2", "test_upgrade_from_1_0_3": "1.0.3"}
         if self._testMethodName in prior_builds:
             self.previous_version = prior_builds[self._testMethodName]
             with zipfile.ZipFile(BASE / "Builds" / (self.previous_version + ".zip")) as archive:
@@ -91,7 +91,7 @@ class PackagedUpdaterTests(unittest.TestCase):
         else:
             shutil.copyfile(BASE / "dist" / EXE_NAME, self.target)
         self.original_hash = file_hash(self.target)
-        self.environment = patch.dict(os.environ, {"YTD_CONFIG_DIR": str(self.directory / "settings")})
+        self.environment = patch.dict(os.environ, {"YTD_CONFIG_DIR": str(self.directory / "settings"), "SDL_AUDIODRIVER": "dummy"})
         self.environment.start()
         self.old = launch_executable(self.target, ["--smoke-test", "90"])
         self.old_tree = ProcessTree(self.old)
@@ -201,6 +201,12 @@ class PackagedUpdaterTests(unittest.TestCase):
     def test_upgrade_from_1_0_2(self):
         self.transaction()
         self.record["previous_version"] = "1.0.2"
+        self.record["new_version"] = APP_VERSION
+
+    @unittest.skipUnless((BASE / "Builds" / "1.0.3.zip").is_file(), "Previous release ZIP required")
+    def test_upgrade_from_1_0_3(self):
+        self.transaction()
+        self.record["previous_version"] = "1.0.3"
         self.record["new_version"] = APP_VERSION
 
     def test_failed_new_version_startup_restores_and_restarts_old(self):

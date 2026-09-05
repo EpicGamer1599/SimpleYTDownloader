@@ -12,6 +12,7 @@ from dataclasses import replace
 from unittest.mock import PropertyMock, patch
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 import pygame
 
 from config.settings import SettingsManager
@@ -68,6 +69,79 @@ class GuiTests(unittest.TestCase):
         self.app.inputs["url"].set("https://youtu.be/jNQXAC9IVRw")
         self.app.add_to_queue()
         self.assertTrue(self.app.manager.snapshot()[0].save_thumbnails)
+
+    def test_setting_sounds_mute_persistence_and_no_repeated_feedback(self):
+        with patch.object(self.app.sounds, "toggle") as toggle, patch.object(self.app.updates, "check"):
+            for key in ("save_thumbnails", "auto_start", "remember", "auto_check_updates"):
+                previous = getattr(self.app.settings, key)
+                self.app.setting(key, not previous)
+                self.app.setting(key, previous)
+            self.assertEqual(toggle.call_count, 8)
+            self.app.setting("save_thumbnails", self.app.settings.save_thumbnails)
+            self.assertEqual(toggle.call_count, 8)
+        self.click("nav:Settings")
+        self.click("toggle:sound_effects")
+        self.assertFalse(self.app.sounds.enabled)
+        self.assertFalse(SettingsManager(Path(self.temp.name) / "config").settings.sound_effects)
+        self.click("toggle:sound_effects")
+        self.assertTrue(self.app.sounds.enabled)
+        pygame.image.save(self.app.surface, ARTIFACTS / "settings-sounds-1.0.4.png")
+
+    def test_download_sounds_follow_work_and_completion_events_only_once(self):
+        self.app.manager.add("https://youtu.be/jNQXAC9IVRw", "MP4", "720p", self.temp.name)
+        item = self.app.manager.items[0]
+        item.state, item.stage = "Downloading", "Downloading stream 1"
+        self.app.manager.pause()  # Pausing the queue lets active work finish.
+        with patch.object(self.app.sounds, "sync") as sync, patch.object(self.app.sounds, "finished") as finished:
+            self.app.step([])
+            sync.assert_called_with(True)
+            item.stage = "Cancelling..."
+            self.app.step([])
+            sync.assert_called_with(False)
+            item.state = "Completed"
+            self.app.manager._completions.put(replace(item))
+            for _ in range(10):
+                self.app.step([])
+            finished.assert_called_once()
+            self.app.updates._set(state="downloading")
+            self.app.step([])
+            sync.assert_called_with(True)
+            self.app.begin_close()
+            self.app.step([])
+            sync.assert_called_with(False)
+        self.assertTrue(self.app.sounds.closed)
+
+    def test_modal_transitions_discard_underlying_and_stale_click_targets(self):
+        self.app.inputs["url"].set("https://youtu.be/jNQXAC9IVRw")
+        self.app.draw()
+        position = next(hit.rect.center for hit in self.app.hits if hit.key == "add")
+        self.app.notify("A test error", True)
+        self.app.step([pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=position),
+                       pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=position)])
+        self.assertEqual(self.app.manager.snapshot(), [])
+        position = next(hit.rect.center for hit in self.app.hits if hit.key == "error:copy")
+        self.app.error_dialog.close()
+        self.app.step([pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=position),
+                       pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=position)])
+        self.assertTrue(self.app.running)
+
+    def test_invalid_worker_progress_and_text_do_not_crash_queue_rendering(self):
+        self.app.manager.add("https://youtu.be/jNQXAC9IVRw", "MP4", "720p", self.temp.name)
+        item = self.app.manager.items[0]
+        item.state = "Downloading"
+        self.app.manager._apply_event(item, {"event": "progress", "progress": float("nan"),
+            "eta": float("inf"), "speed": "invalid", "downloaded_bytes": -20,
+            "total_bytes": 10 ** 400, "title": "A\x00title\ud800", "stage": None})
+        self.click("nav:Queue")
+        self.assertTrue(self.app.running)
+        self.assertEqual(item.progress, 0)
+        self.assertEqual(item.downloaded_bytes, 0)
+        self.assertIsNone(item.eta)
+        self.assertEqual(item.title, "Atitle")
+        self.app.manager._apply_event(item, {"event": "progress", "progress": 4, "eta": -1, "speed": 1024})
+        self.app.step([])
+        self.assertEqual(item.progress, 1)
+        self.assertEqual(item.eta, 0)
 
     def test_error_dialog_report_is_explicit_prefilled_and_nonblocking(self):
         entered, released = threading.Event(), threading.Event()

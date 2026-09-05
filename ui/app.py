@@ -24,6 +24,7 @@ from runtime import helper_command
 from update_service import UpdateService
 from ui.update_dialog import UpdateDialog
 from ui.error_dialog import ErrorDialog
+from ui.sounds import SoundEffects
 from error_reporting import ErrorReport
 
 
@@ -66,6 +67,7 @@ class App:
         self.surface = pygame.display.set_mode(size, pygame.RESIZABLE)
         self.settings_manager = settings_manager or SettingsManager()
         self.settings = self.settings_manager.settings
+        self.sounds = SoundEffects(self.settings.sound_effects)
         self.p = Painter(self.surface, accent_for(self.settings.accent_theme))
         icon_surface = pygame.Surface((48, 48), pygame.SRCALPHA)
         icon_painter = Painter(icon_surface)
@@ -200,7 +202,14 @@ class App:
                 self.notify("The folder picker closed unexpectedly. Type a folder path or try again.", True)
 
     def setting(self, key, value):
+        previous = getattr(self.settings, key)
+        if previous == value:
+            return
         setattr(self.settings, key, value)
+        if key == "sound_effects":
+            self.sounds.set_enabled(value)
+        elif type(previous) is bool and type(value) is bool:
+            self.sounds.toggle()
         if key == "auto_start":
             self.manager.auto_start = value
         elif key == "accent_theme":
@@ -590,6 +599,15 @@ class App:
         self.button("check_updates", "Check for Updates", (x + width - 202, y + 110, 178, 40),
                     self.check_for_updates, enabled=not self.updates.alive)
         y += 190
+        self.p.panel(pygame.Rect(x, y, width, 108))
+        self.p.text("SOUND EFFECTS", (x + 24, y + 18), 10, self.p.accent, True)
+        self.p.text("Play interface and download sounds", (x + 24, y + 43), 15, TEXT, True, width=width - 155)
+        self.p.text(self.sounds.problem or "Toggle clicks, download activity, and a completion chime.",
+                    (x + 24, y + 75), 12, MUTED, width=width - 140)
+        value = self.settings.sound_effects
+        self.button("toggle:sound_effects", "ON" if value else "OFF", (x + width - 93, y + 38, 69, 36),
+                    lambda v=value: self.setting("sound_effects", not v), selected=value)
+        y += 124
         defaults_height = 89 + self.choices_height(VIDEO_QUALITIES, inner - 126) + 18 + self.choices_height(AUDIO_QUALITIES, inner - 126) + 26
         self.p.panel(pygame.Rect(x, y, width, defaults_height))
         self.p.text("DOWNLOAD DEFAULTS", (x + 24, y + 21), 10, MUTED, True)
@@ -655,6 +673,7 @@ class App:
         if self.closing:
             return
         self.closing = True
+        self.sounds.close()
         self.updates.shutdown(wait=False)
         self.manager.shutdown(wait=False)
         if self.picker:
@@ -749,6 +768,13 @@ class App:
             if not self.closing:
                 self.error_dialog.show(report)
         self.error_dialog.poll()
+        for _ in self.manager.completion_events():
+            if not self.closing:
+                self.sounds.finished()
+        downloading = (not self.closing and (
+            any(item.state == "Downloading" and not item.stage.startswith("Cancelling") for item in self.manager.snapshot())
+            or self.updates.snapshot().state == "downloading"))
+        self.sounds.sync(downloading)
         if self.closing and not self.manager.alive and self.picker is None and not self.updates.alive:
             self.running = False
         self.draw()
@@ -775,6 +801,7 @@ class App:
             self.close()
 
     def close(self):
+        self.sounds.close()
         self.updates.shutdown()
         self.manager.shutdown()
         if self.picker:

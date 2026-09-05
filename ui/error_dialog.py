@@ -24,12 +24,14 @@ class ErrorDialog:
         return bool(self.reports)
 
     def show(self, report):
+        self.app.hits = []
         if report not in self.reports:
             self.reports.append(report)
         self.app.focus = "error:close"
         self.app.pressed = None
 
     def close(self):
+        self.app.hits = []
         if self.reports:
             self.reports.popleft()
         self.app.notice = None

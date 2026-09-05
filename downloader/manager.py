@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import shutil
@@ -32,6 +33,7 @@ class DownloadManager:
         self._stop = threading.Event()
         self._cancel = threading.Event()
         self._events = queue.Queue()
+        self._completions = queue.Queue()
         self._command = worker_command or helper_command("download-worker")
         self._thread = threading.Thread(target=self._dispatch, name="download-queue", daemon=True)
         self._thread.start()
@@ -114,6 +116,15 @@ class DownloadManager:
             except queue.Empty:
                 return events
 
+    def completion_events(self):
+        """One event per completed attempt, including work between GUI frames."""
+        result = []
+        while True:
+            try:
+                result.append(self._completions.get_nowait())
+            except queue.Empty:
+                return result
+
     def _dispatch(self) -> None:
         while not self._stop.is_set():
             with self._condition:
@@ -136,6 +147,8 @@ class DownloadManager:
                         item.stage = "Download failed"
             finally:
                 with self._condition:
+                    if item.state == "Completed":
+                        self._completions.put(replace(item))
                     if item.state == "Failed":
                         self._events.put(ErrorReport.create(item.error, "Download " + item.format, item.error_code))
                     elif item.warning_code:
@@ -247,9 +260,26 @@ class DownloadManager:
 
     def _apply_event(self, item: DownloadItem, event: dict) -> None:
         kind = event.get("event")
-        for key in ("title", "actual_quality", "progress", "downloaded_bytes", "total_bytes", "speed", "eta", "stage", "filename", "thumbnail_filename", "warning", "warning_code", "error", "error_code"):
-            if key in event:
-                setattr(item, key, event[key])
+        for key in ("title", "actual_quality", "stage", "filename", "thumbnail_filename", "warning", "warning_code", "error", "error_code"):
+            value = event.get(key)
+            if isinstance(value, str):
+                limit = 32768 if key in ("filename", "thumbnail_filename") else 650
+                value = "".join(c for c in value if c != "\x00" and not 0xD800 <= ord(c) <= 0xDFFF)[:limit]
+                setattr(item, key, value)
+        for key in ("progress", "downloaded_bytes", "total_bytes", "speed", "eta"):
+            value = event.get(key)
+            if key == "eta" and key in event and value is None:
+                item.eta = None
+            if type(value) not in (int, float):
+                continue
+            try:
+                number = float(value)
+            except OverflowError:
+                continue
+            if math.isfinite(number):
+                maximum = 1 if key == "progress" else 2 ** 63 - 1
+                number = max(0, min(maximum, number))
+                setattr(item, key, int(number) if key.endswith("bytes") else number)
         if kind == "media_saved":
             item.media_saved = True
         elif kind == "completed":

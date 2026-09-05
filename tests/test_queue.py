@@ -77,6 +77,16 @@ class QueueTests(unittest.TestCase):
         self.add()
         self.wait_for(lambda items: items[0].state == "Completed")
 
+    def test_completion_events_survive_clearing_history_and_ignore_failures(self):
+        self.add("FAIL0000001")
+        expected = self.add()
+        self.manager.start()
+        self.wait_for(lambda items: items[-1].state == "Completed" and self.manager.active_id is None)
+        self.manager.clear_completed()
+        events = self.manager.completion_events()
+        self.assertEqual([item.id for item in events], [expected.id])
+        self.assertEqual(self.manager.completion_events(), [])
+
     def test_cancel_during_thumbnail_keeps_saved_media_and_cleans_staging(self):
         item = self.manager.add("https://youtu.be/THUMB000001", "MP4", "720p", self.temp.name, True)
         self.manager.start()

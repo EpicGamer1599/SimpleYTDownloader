@@ -33,6 +33,7 @@
 | **A queue you control** | Add multiple videos, start or pause the queue, cancel items, retry failures, and follow progress. |
 | **A clean desktop interface** | A resizable dark Pygame UI with keyboard shortcuts, clipboard support, and a native Windows folder picker. |
 | **Six accent themes** | Switch instantly between Orange, Blue, Violet, Mint, Rose, and Gold. Your choice is remembered. |
+| **Optional sound effects** | Hear setting toggles, a quiet loop during downloads, and a completion chime. Mute everything in Settings. |
 | **Helpful error dialogs** | See a stable error code, copy a report, or open a prefilled GitHub issue to review and submit. |
 | **Readable filenames** | Keep original titles, handle Windows filename rules, and preserve existing files with numbered suffixes. |
 | **Remembered preferences** | Save your format, quality, folder, tool paths, and automatic-update preference. |
@@ -41,14 +42,14 @@
 
 ## Quick start
 
-1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the application ZIP asset (for example, `1.0.3.zip` or `SimpleYTDownloader-v1.0.3.zip`).
+1. Open **[Releases](https://github.com/EpicGamer1599/SimpleYTDownloader/releases)** and download the application ZIP asset (for example, `1.0.4.zip` or `SimpleYTDownloader-v1.0.4.zip`).
 2. Extract **`SimpleYTDownloader.exe`** into a writable folder and launch it.
 3. Paste a video URL on **Download**, choose **MP4** or **MP3**, and select your quality and output folder.
 4. Click **Add to Queue**, open **Queue**, and click **Start queue**.
 
-> **Version 1.0.3 build:** [Builds/1.0.3.zip](Builds/1.0.3.zip) contains the application EXE. Upload `dist/SimpleYTDownloader-v1.0.3.zip` to the GitHub Release to support every updater-enabled version, including 1.0.0 and 1.0.1. Older builds remain in [Builds](Builds).
+> **Version 1.0.4 build:** [Builds/1.0.4.zip](Builds/1.0.4.zip) contains the application EXE with its sounds embedded. Upload `dist/SimpleYTDownloader-v1.0.4.zip` to the GitHub Release to support every updater-enabled version, including 1.0.0 and 1.0.1. Older builds remain in [Builds](Builds).
 
-See [what changed in 1.0.3](docs/releases/1.0.3.md) for the release notes, or the [1.0.1 features](docs/releases/1.0.1.md) and [1.0.2 updater improvements](docs/releases/1.0.2.md).
+See [what changed in 1.0.4](docs/releases/1.0.4.md) for the release notes, or the [1.0.1 features](docs/releases/1.0.1.md), [1.0.2 updater improvements](docs/releases/1.0.2.md), and [1.0.3 reliability fixes](docs/releases/1.0.3.md).
 
 ### Media tools
 
@@ -72,6 +73,20 @@ Turn **Settings → Save video thumbnails** on to save an image beside newly que
 The image normally shares the saved media's filename stem. Existing images are preserved with a numbered suffix when needed. A missing, unsupported, oversized, or unreachable thumbnail produces a reportable warning while keeping the successfully downloaded media. Thumbnail transfers run inside the download worker, so queue cancellation and shutdown stop them as well. Each image is limited to 12 MiB, with up to three metadata-provided candidates attempted.
 
 Since **1.0.3**, the MP4/MP3 is saved to the output folder before thumbnail retrieval starts. Cancelling at that point keeps the media and marks the item completed with a warning about the unfinished thumbnail. A worker error after the media-save notification also preserves the completed result, and the queue can continue.
+
+### Sound effects
+
+Open **Settings → Sound Effects → Play interface and download sounds** to turn all effects on or off. Sound is on by default, including when upgrading existing preferences. Keep **Remember settings** enabled to retain your mute choice.
+
+| Sound | When it plays |
+| :--- | :--- |
+| `on_off.mp3` | When any on/off preference changes. Muting gives one final click, then subsequent actions stay silent. |
+| `Downloading.wav` | Loops while a queue item is working, including conversion and thumbnails, or an application update is downloading. It stops when idle, cancelled, muted, or closing. |
+| `FinishDownload.mp3` | Plays when a media download completes, including saved media with a thumbnail warning. Failed attempts without saved media do not chime. |
+
+Pausing the queue lets the current item finish, so its loop continues until that work stops. The loop plays quietly and becomes quieter during the completion chime when the next item starts. Playback uses separate channels so a setting click does not interrupt a chime or restart the loop.
+
+The three supplied files live in `soundeffects/` for development and are bundled inside the release EXE; users do not need a separate sound folder or FFmpeg for these effects. Missing/unsupported clips and unavailable audio devices leave the app usable, with an audio status message in Settings. After reconnecting an unavailable device, switch sound off and back on to retry initialization.
 
 ### Error reports
 
@@ -198,12 +213,12 @@ If the project environment already exists, launch directly with the final comman
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
 .\.venv\Scripts\Activate.ps1
-python -m PyInstaller --onefile --windowed --name SimpleYTDownloader main.py
+python -m PyInstaller --onefile --windowed --name SimpleYTDownloader --add-data "soundeffects:soundeffects" main.py
 ```
 
 **Output:** `dist/SimpleYTDownloader.exe`
 
-The build includes the GUI, yt-dlp, Python dependencies, download worker, native folder picker, and updater through normal imports. No additional hidden imports or separately distributed updater are required. The EXE opens without a console. FFmpeg/FFprobe and a JavaScript runtime remain separate media tools; portable FFmpeg can be placed under `dist/tools/ffmpeg/bin/`.
+The build includes the GUI, yt-dlp, Python dependencies, download worker, native folder picker, and updater through normal imports. The `--add-data` option embeds `soundeffects/` in the one-file EXE and is required for the sounds. Alternatively, run `python -m PyInstaller SimpleYTDownloader.spec`; the checked-in spec includes the same data directory. No additional hidden imports or separately distributed updater are required. The EXE opens without a console. FFmpeg/FFprobe and a JavaScript runtime remain separate media tools; portable FFmpeg can be placed under `dist/tools/ffmpeg/bin/`.
 
 <details>
 <summary><strong>Refresh yt-dlp in a source environment</strong></summary>
@@ -221,7 +236,7 @@ If YouTube changes cause extraction errors, update yt-dlp in the project environ
 The application version has one source of truth: **[app_version.py](app_version.py)**.
 
 ```python
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 ```
 
 For the next release, set a strictly higher stable semantic version, then follow these steps:
@@ -244,14 +259,15 @@ For the next release, set a strictly higher stable semantic version, then follow
 | `1.0.1` | `v1.0.1` | `SimpleYTDownloader-v1.0.1.zip` |
 | `1.0.2` | `v1.0.2` | `SimpleYTDownloader-v1.0.2.zip` |
 | `1.0.3` | `v1.0.3` | `SimpleYTDownloader-v1.0.3.zip` |
+| `1.0.4` | `v1.0.4` | `SimpleYTDownloader-v1.0.4.zip` |
 | `1.1.0` | `v1.1.0` | `SimpleYTDownloader-v1.1.0.zip` |
 
-**Compatibility with installed 1.0.0 / original 1.0.1:** those EXEs still require the standard filename above. Publish 1.0.3 with `SimpleYTDownloader-v1.0.3.zip` so they can update directly, or let users manually extract `Builds/1.0.3.zip`. Changing source code or release descriptions cannot change the updater inside an already installed EXE. Users running 1.0.2 or newer accept short ZIP filenames too. Keeping the standard name supports users who skip versions.
+**Compatibility with installed 1.0.0 / original 1.0.1:** those EXEs still require the standard filename above. Publish 1.0.4 with `SimpleYTDownloader-v1.0.4.zip` so they can update directly, or let users manually extract `Builds/1.0.4.zip`. Changing source code or release descriptions cannot change the updater inside an already installed EXE. Users running 1.0.2 or newer accept short ZIP filenames too. Keeping the standard name supports users who skip versions.
 
 The ZIP must contain **exactly one file at its root**:
 
 ```text
-SimpleYTDownloader-v1.0.3.zip
+SimpleYTDownloader-v1.0.4.zip
 └── SimpleYTDownloader.exe
 ```
 
@@ -268,11 +284,14 @@ Run these in a normal interactive Windows session; GUI tests open real windows a
 # After building: real EXE media worker and native folder picker
 .\.venv\Scripts\python.exe -m tests.executable_smoke
 
+# Embedded sounds, using a copied EXE without an external sound folder
+.\.venv\Scripts\python.exe -m tests.sound_executable_smoke
+
 # Real frozen helper: success, cancellation, and rollback on disposable copies
 .\.venv\Scripts\python.exe -m tests.updater_executable_smoke
 ```
 
-Media tests use generated fixtures served over loopback and require FFmpeg/FFprobe. Updater tests use controlled API responses and archives; packaged updater tests replace only disposable EXE copies. These suites do not perform a production update or contact YouTube. The packaged updater report is saved to `test-artifacts/updater-executable-report.json`.
+Media tests use generated fixtures served over loopback and require FFmpeg/FFprobe. Sound tests decode the actual supplied clips and exercise playback with SDL's dummy audio device; listening on real hardware is a separate manual check. Updater tests use controlled API responses and archives; packaged updater tests replace only disposable EXE copies. These suites do not perform a production update or contact YouTube. The packaged updater report is saved to `test-artifacts/updater-executable-report.json`.
 
 <details>
 <summary><strong>Optional GUI screenshot and live YouTube test</strong></summary>
@@ -317,8 +336,10 @@ SimpleYTDownloader/
 │   ├── app.py                 Pages, layout, input, and main loop
 │   ├── update_dialog.py       Release notes and update progress
 │   ├── error_dialog.py        Error details, copying, and GitHub reports
+│   ├── sounds.py              Cached effects and optional mixer playback
 │   ├── widgets.py             Drawing, icons, controls, and text fields
 │   └── native.py              Windows folder picker and clipboard
+├── soundeffects/              Supplied clips embedded in the EXE
 ├── scripts/
 │   └── package_release.py     Version-checked release ZIP creation
 └── tests/                     Unit, GUI, media, and packaged EXE checks

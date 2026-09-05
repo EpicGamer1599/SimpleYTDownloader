@@ -2,6 +2,49 @@
 
 Latest verification: Windows, 2026-09-06. Earlier release results are retained below.
 
+## Version 1.0.4
+
+Added the supplied sound effects, a persistent master sound preference, and separate channels for toggle clicks, the activity loop, and completion chimes. Hardened worker progress/text handling and cleared stale button targets when dialogs open or close. Rebuilt with `APP_VERSION = "1.0.4"`; no dependencies were added or upgraded.
+
+| Verification | Result |
+| --- | --- |
+| Syntax compilation and module imports | Passed for the entry point, settings, downloader, UI, tests, packaging modules, checker, and updater |
+| `python -m unittest discover -v` | **100 passed**, no skips, in 32.129 seconds |
+| `python -m tests.sound_executable_smoke` | **1 passed** in 3.057 seconds |
+| `python -m tests.executable_smoke` | **7 passed** in 39.375 seconds |
+| `python -m tests.updater_executable_smoke` | **6 passed** in 43.629 seconds |
+| One-file/windowed PyInstaller build with sound data | Exit code 0; packaged EXE exists and `--version` reports **1.0.4** |
+| Release ZIP integrity | Both ZIPs passed CRC checks and contain exactly the hash-matching `SimpleYTDownloader.exe` at their root |
+
+**114 tests passed** across the source and packaged suites. Build command:
+
+```powershell
+python -m PyInstaller --onefile --windowed --name SimpleYTDownloader --add-data "soundeffects:soundeffects" main.py
+```
+
+Sound and regression coverage:
+
+- Actual supplied assets decode through Pygame: `on_off.mp3` (0.144 seconds), `FinishDownload.mp3` (2.924 seconds), and `Downloading.wav` (5.352 seconds). Playback starts on independent channels, the activity loop does not restart each frame, and it becomes quieter while a chime plays.
+- Muting stops activity/chimes with one final toggle click; later muted actions stay silent. Unmuting resumes active work. Startup with saved sound disabled does not initialize audio. Shutdown is idempotent and stops all channels.
+- Simulated missing devices, missing files, and playback failures do not crash the app. A frozen asset lookup resolves the bundled directory. Old preferences default to sound enabled, and a saved mute choice survives reload.
+- GUI checks exercise boolean setting feedback, mute persistence, active/paused/cancelling queues, update-download activity, shutdown, and exactly-once completion feedback across repeated frames. Queue tests verify a completion event survives removal of completed history and failed attempts do not emit it.
+- NaN, infinity, malformed types, huge integers, negative values, and invalid text in worker events are safely handled before rendering. Opening an error dialog blocks stale underlying button targets immediately; closing it blocks a stale report-copy target.
+- `test-artifacts/settings-sounds-1.0.4.png` was visually reviewed. The new sound preference is visible in the normal Settings layout; existing small-window GUI regressions also passed.
+
+The standalone sound test copies only the EXE to an isolated directory with no external `soundeffects/` folder, then decodes and plays all three bundled clips, verifies loop start/stop and toggle/completion channel activity, and confirms version 1.0.4. It uses SDL's **dummy audio device**, so it verifies decoding and playback state rather than audible output from physical speakers/headphones.
+
+The seven packaged media/native-picker tests cover MP4, MP3 conversion, separate-stream merging, thumbnails with both formats, missing/disabled thumbnails, and the real Windows folder dialog. The six real frozen-helper transactions cover replacement/relaunch/cleanup, failed-startup rollback, cancellation before handoff, and direct upgrades from the preserved **1.0.0, 1.0.2, and 1.0.3** EXEs to **1.0.4**. All replacement tests use disposable installations. No production installation or GitHub release was changed.
+
+Artifacts:
+
+- `dist/SimpleYTDownloader.exe`: **27,892,007 bytes**, SHA-256 `384c1bd80d311d2c1a21951a4dbcd8b806832bb8e158dcc4458c35bede3fb5a8`.
+- `dist/SimpleYTDownloader-v1.0.4.zip` and `Builds/1.0.4.zip`: **27,616,444 bytes** each, SHA-256 `8c7621dad5ef1937c800c2dd0f6d4f4737d852f3977b13c4f0bbe71e53f34ee5`.
+- `test-artifacts/tests-1.0.4.log`, `build-1.0.4.log`, `packaged-sounds-1.0.4.log`, `packaged-media-1.0.4.log`, and `updater-1.0.4.log`: detailed results.
+- `test-artifacts/release-1.0.4.json`, `sound-executable-1.0.4.json`, and `updater-executable-1.0.4.json`: artifact and runtime reports.
+- `docs/releases/1.0.4.md`: release notes and upload instructions. Earlier release ZIPs are preserved.
+
+Limits: audible volume, seamlessness of the supplied loop, and physical device reconnection need manual listening/hardware checks. Missing-device failure paths are simulated. The app can retry unavailable audio initialization by switching sound off and on. Audio initialization and the initial decoding of the small bundled clips are synchronous; subsequent playback uses SDL's background mixer. Media tests use loopback fixtures, not current live YouTube extraction. Existing FFmpeg/runtime, updater permissions, antivirus-lock, power-loss, and startup-acknowledgement limitations remain as described below.
+
 ## Version 1.0.3
 
 Reviewed the update transaction, HTTP client, download worker/queue, preference persistence, text rendering, and release dialog. Fixed concrete failure paths and rebuilt the application with `APP_VERSION = "1.0.3"`. No dependencies were added or upgraded.

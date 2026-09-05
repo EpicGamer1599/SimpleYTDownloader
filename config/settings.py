@@ -24,6 +24,7 @@ class Settings:
     ffmpeg_location: str = ""
     auto_check_updates: bool = True
     save_thumbnails: bool = False
+    sound_effects: bool = True
     accent_theme: str = "Orange"
 
 
